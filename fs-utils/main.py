@@ -121,9 +121,9 @@ def handle_request(req: RequestModel):
 
 # ---- Launch server in background and run demo ----
 def run_server():
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="error")
+    uvicorn.run(app, host="127.0.0.1", port=4040, log_level="error")
 
-# uvicorn main:app --reload --host 127.0.0.1 --port 8000
+# uvicorn main:app --reload --host 127.0.0.1 --port 4040
 
 if __name__ == "__main__":
     import sys
@@ -135,12 +135,12 @@ if __name__ == "__main__":
     #     # run_demo_requests()  # your sequence of sample API calls
     # else:
         # run server in the foreground (stays alive)
-    # uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
+    # uvicorn.run(app, host="127.0.0.1", port=4040, reload=True)
 
     alias = "user123"
 
     def call_api(payload):
-        r = requests.post("http://127.0.0.1:8000/fs", json=payload)
+        r = requests.post("http://127.0.0.1:4040/fs", json=payload)
         print("Request:", payload)
         print("Response:", r.json(), "\n")
 
