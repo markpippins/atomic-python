@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<window xmlns="http://schemas.haulmont.com/cuba/window.xsd"
+        caption="msg://editorCaption"
+        class="com.angrysurfer.mildred.web.media.asset.AssetEdit"
+        datasource="assetDs"
+        focusComponent="fieldGroup"
+        messagesPack="com.angrysurfer.mildred.web.media.asset">
+    <dsContext>
+        <datasource id="assetDs"
+                    allowCommit="false"
+                    class="com.angrysurfer.mildred.entity.media.Asset"
+                    view="Asset-screen-view"/>
+        <collectionDatasource id="fileTypesDs"
+                              class="com.angrysurfer.mildred.entity.media.FileType"
+                              view="_minimal">
+            <query>
+                <![CDATA[select e from mildred$FileType e]]>
+            </query>
+        </collectionDatasource>
+    </dsContext>
+    <dialogMode forceDialog="true"
+                height="600"
+                resizable="true"
+                width="530"/>
+    <layout expand="accordion"
+            spacing="true">
+        <accordion id="accordion">
+            <tab caption="Asset Info"
+                 expand="fieldgroup_1"
+                 margin="true"
+                 spacing="true">
+                <fieldGroup id="fieldGroup"
+                            datasource="assetDs"
+                            editable="false">
+                    <column>
+                        <field caption="id"
+                               property="id"/>
+                        <field property="document"
+                               rows="12"
+                               visible="false"/>
+                        <field caption="as of"
+                               property="effectiveDt"/>
+                    </column>
+                    <column>
+                        <field caption="doc type"
+                               property="assetType"/>
+                        <field caption="file type"
+                               optionsDatasource="fileTypesDs"
+                               property="fileType"/>
+                        <field caption="until"
+                               property="expirationDt"/>
+                    </column>
+                </fieldGroup>
+                <fieldGroup id="fieldgroup_1"
+                            datasource="assetDs"
+                            editable="false"
+                            width="100%">
+                    <column width="100%">
+                        <field caption="path"
+                               property="absolutePath"
+                               rows="5"/>
+                    </column>
+                </fieldGroup>
+            </tab>
+            <tab caption="Elasticsearch Document"
+                 expand="assetSourceCodeEditor"
+                 margin="true"
+                 spacing="true">
+                <hbox spacing="true">
+                    <label id="documentLabel"/>
+                </hbox>
+                <sourceCodeEditor id="assetSourceCodeEditor"
+                                  datasource="assetDs"
+                                  mode="JavaScript"
+                                  property="document"
+                                  width="100%"/>
+            </tab>
+        </accordion>
+        <frame id="windowActions"
+               align="BOTTOM_RIGHT"
+               screen="editWindowActions"
+               width="AUTO"/>
+    </layout>
+</window>

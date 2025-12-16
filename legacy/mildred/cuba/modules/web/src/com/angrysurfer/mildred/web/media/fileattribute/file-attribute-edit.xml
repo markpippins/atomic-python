@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<window xmlns="http://schemas.haulmont.com/cuba/window.xsd"
+        caption="msg://editorCaption"
+        class="com.angrysurfer.mildred.web.media.fileattribute.FileAttributeEdit"
+        datasource="fileAttributeDs"
+        focusComponent="fieldGroup"
+        messagesPack="com.angrysurfer.mildred.web.media.fileattribute">
+    <dsContext>
+        <datasource id="fileAttributeDs"
+                    class="com.angrysurfer.mildred.entity.media.FileAttribute"
+                    view="fileAttribute-view"/>
+        <collectionDatasource id="encodingsDs"
+                              class="com.angrysurfer.mildred.entity.media.FileEncoding"
+                              view="_minimal">
+            <query>
+                <![CDATA[select e from mildred$FileEncoding e]]>
+            </query>
+        </collectionDatasource>
+    </dsContext>
+    <dialogMode forceDialog="true"
+                height="AUTO"
+                width="AUTO"/>
+    <layout expand="windowActions"
+            spacing="true">
+        <fieldGroup id="fieldGroup"
+                    datasource="fileAttributeDs">
+            <column width="250px">
+                <field optionsDatasource="encodingsDs"
+                       property="encoding"/>
+                <field property="attributeName"/>
+            </column>
+        </fieldGroup>
+        <frame id="windowActions"
+               align="BOTTOM_RIGHT"
+               screen="editWindowActions"
+               width="AUTO"/>
+    </layout>
+</window>

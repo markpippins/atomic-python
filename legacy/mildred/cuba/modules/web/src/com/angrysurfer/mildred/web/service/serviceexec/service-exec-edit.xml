@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<window xmlns="http://schemas.haulmont.com/cuba/window.xsd"
+        caption="msg://editorCaption"
+        class="com.angrysurfer.mildred.web.service.serviceexec.ServiceExecEdit"
+        datasource="serviceExecDs"
+        focusComponent="fieldGroup"
+        messagesPack="com.angrysurfer.mildred.web.service.serviceexec">
+    <dsContext>
+        <datasource id="serviceExecDs"
+                    class="com.angrysurfer.mildred.entity.service.ServiceExec"
+                    view="_local"/>
+    </dsContext>
+    <dialogMode forceDialog="true"
+                modal="false"
+                height="AUTO"
+                width="AUTO"/>
+    <layout expand="windowActions"
+            spacing="true">
+        <fieldGroup id="fieldGroup"
+                    datasource="serviceExecDs"
+                    editable="false">
+            <column width="250px">
+                <field caption="msg://pid"
+                       property="pid"/>
+                <field caption="msg://status"
+                       property="status"/>
+                <field caption="msg://startDt"
+                       property="startDt"/>
+                <field caption="msg://endDt"
+                       property="endDt"/>
+                <field caption="msg://effectiveDt"
+                       property="effectiveDt"/>
+                <field caption="msg://expirationDt"
+                       property="expirationDt"/>
+            </column>
+        </fieldGroup>
+        <frame id="windowActions"
+               align="BOTTOM_RIGHT"
+               screen="editWindowActions"
+               width="AUTO"/>
+    </layout>
+</window>

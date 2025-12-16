@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<window xmlns="http://schemas.haulmont.com/cuba/window.xsd"
+        caption="msg://editorCaption"
+        class="com.angrysurfer.mildred.web.service.switchrule.SwitchRuleEdit"
+        datasource="switchRuleDs"
+        focusComponent="fieldGroup"
+        messagesPack="com.angrysurfer.mildred.web.service.switchrule">
+    <dsContext>
+        <datasource id="switchRuleDs"
+                    class="com.angrysurfer.mildred.entity.service.SwitchRule"
+                    view="SwitchRule-screen-view"/>
+        <collectionDatasource id="beginModesDs"
+                              class="com.angrysurfer.mildred.entity.service.Mode"
+                              view="_minimal">
+            <query>
+                <![CDATA[select e from mildred$Mode e]]>
+            </query>
+        </collectionDatasource>
+        <collectionDatasource id="endModesDs"
+                              class="com.angrysurfer.mildred.entity.service.Mode"
+                              view="_minimal">
+            <query>
+                <![CDATA[select e from mildred$Mode e]]>
+            </query>
+        </collectionDatasource>
+        <collectionDatasource id="beforeDispatchesDs"
+                              class="com.angrysurfer.mildred.entity.service.ServiceDispatch"
+                              view="_minimal">
+            <query>
+                <![CDATA[select e from mildred$ServiceDispatch e
+ order by e.packageName, e.moduleName, 
+          e.className, e.funcName]]>
+            </query>
+        </collectionDatasource>
+        <collectionDatasource id="afterDispatchesDs"
+                              class="com.angrysurfer.mildred.entity.service.ServiceDispatch"
+                              view="_minimal">
+            <query>
+                <![CDATA[select e from mildred$ServiceDispatch e
+ order by e.packageName, e.moduleName, 
+          e.className, e.funcName]]>
+            </query>
+        </collectionDatasource>
+        <collectionDatasource id="conditionDispatchesDs"
+                              class="com.angrysurfer.mildred.entity.service.ServiceDispatch"
+                              view="_minimal">
+            <query>
+                <![CDATA[select e from mildred$ServiceDispatch e
+ order by e.packageName, e.moduleName, 
+          e.className, e.funcName]]>
+            </query>
+        </collectionDatasource>
+    </dsContext>
+    <dialogMode forceDialog="true"
+                height="AUTO"
+                width="AUTO"/>
+    <layout expand="windowActions"
+            spacing="true">
+        <fieldGroup id="fieldGroup"
+                    datasource="switchRuleDs">
+            <column width="400px">
+                <field caption="msg://name"
+                       property="name"
+                       width="250px"/>
+                <field caption="msg://beginMode"
+                       optionsDatasource="beginModesDs"
+                       property="beginMode"
+                       width="250px"/>
+                <field caption="msg://endMode"
+                       optionsDatasource="endModesDs"
+                       property="endMode"
+                       width="250px"/>
+                <field caption="msg://beforeDispatch"
+                       optionsDatasource="beforeDispatchesDs"
+                       property="beforeDispatch"/>
+                <field caption="msg://afterDispatch"
+                       optionsDatasource="afterDispatchesDs"
+                       property="afterDispatch"/>
+                <field caption="msg://conditionDispatch"
+                       optionsDatasource="conditionDispatchesDs"
+                       property="conditionDispatch"/>
+            </column>
+        </fieldGroup>
+        <frame id="windowActions"
+               align="TOP_RIGHT"
+               screen="editWindowActions"
+               width="AUTO"/>
+    </layout>
+</window>

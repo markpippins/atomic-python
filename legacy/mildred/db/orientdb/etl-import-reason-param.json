@@ -1,0 +1,32 @@
+{
+  "config": {
+    "log": "debug"
+  },
+  "extractor" : {
+    "jdbc": { "driver": "com.mysql.jdbc.Driver",
+              "url": "jdbc:mysql://localhost/analysis",
+              "userName": "root",
+              "userPassword": "steel",
+              "query": "select * from meta_reason_param" }
+  },
+  "transformers" : [
+   { "vertex": { "class": "MetaReasonParam"} },
+   { "edge": { "class": "Has", "direction" : "in", 
+            "joinFieldName": "meta_reason_id",
+   "lookup":"MetaReason.id", "unresolvedLinkAction":"CREATE"} }
+  ],
+  "loader" : {
+    "orientdb": {
+        "dbURL": "remote:localhost/merlin",
+        "dbUser": "admin",
+        "dbPassword": "admin",
+        "dbAutoCreate": true,
+        "serverUser": "root",
+        "serverPassword": "steel",
+        "tx": false,
+        "batchCommit": 1000,
+        "dbType": "graph"
+    }
+  }
+}
+

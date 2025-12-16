@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<window xmlns="http://schemas.haulmont.com/cuba/window.xsd"
+        caption="msg://browseCaption"
+        class="com.angrysurfer.mildred.web.service.modestate.ModeStateBrowse"
+        focusComponent="modeStatesTable"
+        lookupComponent="modeStatesTable"
+        messagesPack="com.angrysurfer.mildred.web.service.modestate">
+    <dsContext>
+        <groupDatasource id="modeStatesDs"
+                         class="com.angrysurfer.mildred.entity.service.ModeState"
+                         view="ModeState-screen-view">
+            <query>
+                <![CDATA[select e from mildred$ModeState e]]>
+            </query>
+        </groupDatasource>
+    </dsContext>
+    <dialogMode height="600"
+                width="800"/>
+    <layout expand="modeStatesTable"
+            spacing="true">
+        <filter id="filter"
+                applyTo="modeStatesTable"
+                datasource="modeStatesDs">
+            <properties include=".*"/>
+        </filter>
+        <groupTable id="modeStatesTable"
+                    multiselect="true"
+                    width="100%">
+            <actions>
+                <action id="create"/>
+                <action id="edit"/>
+                <action id="remove"/>
+            </actions>
+            <columns>
+                <column id="pid"
+                        caption="msg://pid"/>
+                <column id="mode"
+                        caption="msg://mode"/>
+                <column id="state"
+                        caption="msg://state"/>
+                <column id="timesActivated"
+                        caption="msg://timesActivated"/>
+                <column id="timesCompleted"
+                        caption="msg://timesCompleted"/>
+                <column id="errorCount"
+                        caption="msg://errorCount"/>
+                <column id="cumErrorCount"
+                        caption="msg://cumErrorCount"/>
+                <column id="status"
+                        caption="msg://status"/>
+                <column id="lastActivated"
+                        caption="msg://lastActivated"/>
+                <column id="lastCompleted"
+                        caption="msg://lastCompleted"/>
+                <column id="effectiveDt"
+                        caption="msg://effectiveDt"/>
+                <column id="expirationDt"
+                        caption="msg://expirationDt"/>
+            </columns>
+            <rows datasource="modeStatesDs"/>
+            <rowsCount/>
+            <buttonsPanel id="buttonsPanel"
+                          alwaysVisible="true">
+                <button id="createBtn"
+                        action="modeStatesTable.create"/>
+                <button id="editBtn"
+                        action="modeStatesTable.edit"/>
+                <button id="removeBtn"
+                        action="modeStatesTable.remove"/>
+            </buttonsPanel>
+        </groupTable>
+    </layout>
+</window>

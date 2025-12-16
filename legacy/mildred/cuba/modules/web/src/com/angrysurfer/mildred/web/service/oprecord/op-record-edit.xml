@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<window xmlns="http://schemas.haulmont.com/cuba/window.xsd"
+        caption="msg://editorCaption"
+        class="com.angrysurfer.mildred.web.service.oprecord.OpRecordEdit"
+        datasource="opRecordDs"
+        focusComponent="fieldGroup"
+        messagesPack="com.angrysurfer.mildred.web.service.oprecord">
+    <dsContext>
+        <datasource id="opRecordDs"
+                    class="com.angrysurfer.mildred.entity.service.OpRecord"
+                    view="opRecord-view"/>
+    </dsContext>
+    <dialogMode forceDialog="true"
+                height="AUTO"
+                width="AUTO"/>
+    <layout expand="scrollBox"
+            spacing="true">
+        <scrollBox id="scrollBox"
+                   spacing="true">
+            <fieldGroup id="fieldGroup"
+                        datasource="opRecordDs"
+                        editable="false">
+                <column width="450px">
+                    <field caption="msg://pid"
+                           property="pid"/>
+                    <field caption="msg://operatorName"
+                           property="operatorName"/>
+                    <field caption="msg://operationName"
+                           property="operationName"/>
+                    <field caption="msg://assetId"
+                           property="assetId"
+                           visible="false"/>
+                    <field caption="msg://asset"
+                           property="asset"/>
+                    <field caption="msg://targetPath"
+                           property="targetPath"
+                           rows="4"/>
+                    <field caption="msg://status"
+                           property="status"/>
+                    <field caption="msg://startTime"
+                           property="startTime"/>
+                    <field caption="msg://endTime"
+                           property="endTime"/>
+                    <field caption="msg://effectiveDt"
+                           property="effectiveDt"/>
+                    <field caption="msg://expirationDt"
+                           property="expirationDt"/>
+                </column>
+            </fieldGroup>
+        </scrollBox>
+        <frame id="windowActions"
+               align="BOTTOM_RIGHT"
+               screen="editWindowActions"
+               width="AUTO"/>
+    </layout>
+</window>
