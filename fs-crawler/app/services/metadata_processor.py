@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 import structlog
 
-from models.mongodb_models import FileMetadata, AudioMetadata, VideoMetadata, ImageMetadata, DocumentMetadata
-from handlers.audio import MutagenHandler
-from handlers.image import ExifHandler
-from handlers.generic import GenericFileHandler
-from config import settings
+from ..models.mongodb_models import FileMetadata, AudioMetadata, VideoMetadata, ImageMetadata, DocumentMetadata
+from ..handlers.audio import MutagenHandler
+from ..handlers.image import ExifHandler
+from ..handlers.generic import GenericFileHandler
+from ..config import settings
 
 logger = structlog.get_logger()
 

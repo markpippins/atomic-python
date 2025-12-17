@@ -8,9 +8,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import structlog
 
-from config import settings
-from database import init_databases, close_databases, get_redis, get_mongodb, get_mysql_session
-from api.routes import router
+from .config import settings
+from .database import init_databases, close_databases, get_redis, get_mongodb, get_mysql_session
+from .api.routes import router
 
 
 # Configure structured logging

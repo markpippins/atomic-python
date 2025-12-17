@@ -6,9 +6,9 @@ from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import List, Optional
 import structlog
 
-from database import get_redis, get_mongodb, get_mysql_session
-from models.mysql_models import LibraryPath, FileType, MetadataHandler
-from services.scanner import ScannerService
+from ..database import get_redis, get_mongodb, get_mysql_session
+from ..models.mysql_models import LibraryPath, FileType, MetadataHandler
+from ..services.scanner import ScannerService
 
 logger = structlog.get_logger()
 router = APIRouter()

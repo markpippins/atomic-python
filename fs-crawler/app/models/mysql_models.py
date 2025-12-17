@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
-from database import Base
+from ..database import Base
 
 
 class PathType(str, Enum):

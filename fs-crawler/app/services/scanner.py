@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import structlog
 
-from database import get_redis, get_mongodb, get_mysql_session
-from models.mongodb_models import FileMetadata, DirectoryMetadata
-from models.mysql_models import LibraryPath, ScanOperation, OperationStatus
-from services.metadata_processor import MetadataProcessor
-from config import settings
+from ..database import get_redis, get_mongodb, get_mysql_session
+from ..models.mongodb_models import FileMetadata, DirectoryMetadata
+from ..models.mysql_models import LibraryPath, ScanOperation, OperationStatus
+from .metadata_processor import MetadataProcessor
+from ..config import settings
 
 logger = structlog.get_logger()
 

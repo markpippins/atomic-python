@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 import structlog
 
-from config import settings
+from .config import settings
 
 logger = structlog.get_logger()
 
