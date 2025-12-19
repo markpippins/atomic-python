@@ -8,9 +8,10 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
+from sqlalchemy import text
 import structlog
 
-from .config import settings
+from config import settings
 
 logger = structlog.get_logger()
 
@@ -50,7 +51,7 @@ async def init_databases():
         
         # Test MySQL connection
         async with async_session_maker() as session:
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
         logger.info("MySQL connection established")
         
     except Exception as e:

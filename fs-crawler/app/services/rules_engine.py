@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 import structlog
 
-from database import get_mongodb, get_redis, get_mysql_session
+from database import get_mongodb, get_redis
 from models.rules_models import (
     DeletionRule, RuleSet, RuleCondition, RuleGroup, RuleExecutionContext,
     RuleExecutionResult, ComparisonOperator, LogicalOperator, ActionType,

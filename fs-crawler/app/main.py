@@ -8,9 +8,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import structlog
 
-from .config import settings
-from .database import init_databases, close_databases, get_redis, get_mongodb, get_mysql_session
-from .api.routes import router
+from config import settings
+from database import init_databases, close_databases, get_redis, get_mongodb
+from api.routes import router
 
 
 # Configure structured logging
@@ -110,8 +110,10 @@ async def health_check():
         
         mysql_status = "connected"
         try:
-            async with get_mysql_session() as session:
-                await session.execute("SELECT 1")
+            from database import async_session_maker
+            async with async_session_maker() as session:
+                from sqlalchemy import text
+                await session.execute(text("SELECT 1"))
         except:
             mysql_status = "disconnected"
         

@@ -7,7 +7,7 @@ services:
       - "8000:8000"
     environment:
       - REDIS_URL=redis://redis:6379
-      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_URL=mongodb://mongoUser:somePassword@172.16.30.15:27017/broker-gateway?authSource=admin
       - MYSQL_URL=mysql://media:changeme@mysql:3306/media
       - PYTHONPATH=/app
     volumes:
@@ -15,7 +15,6 @@ services:
       - ./media:/media:ro  # Mount media directories as read-only
     depends_on:
       - redis
-      - mongodb
       - mysql
     restart: unless-stopped
 
@@ -40,17 +39,6 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    restart: unless-stopped
-
-  mongodb:
-    image: mongo:7
-    ports:
-      - "27017:27017"
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=changeme
-    volumes:
-      - mongodb_data:/data/db
     restart: unless-stopped
 
   mysql:
@@ -78,20 +66,6 @@ services:
     profiles:
       - debug
 
-  mongo-express:
-    image: mongo-express:latest
-    ports:
-      - "8082:8081"
-    environment:
-      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
-      - ME_CONFIG_MONGODB_ADMINPASSWORD=changeme
-      - ME_CONFIG_MONGODB_URL=mongodb://admin:changeme@mongodb:27017/
-    depends_on:
-      - mongodb
-    profiles:
-      - debug
-
 volumes:
   redis_data:
-  mongodb_data:
   mysql_data:

@@ -78,8 +78,10 @@ class StartupService:
         
         # Test MySQL connection
         try:
-            async with get_mysql_session() as session:
-                await session.execute("SELECT 1")
+            from database import async_session_maker
+            async with async_session_maker() as session:
+                from sqlalchemy import text
+                await session.execute(text("SELECT 1"))
             logger.info("MySQL connection validated")
         except Exception as e:
             logger.error("MySQL connection failed", error=str(e))
