@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  broker-service:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+    environment:
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    networks:
+      - atomic-network
+
+networks:
+  atomic-network:
+    driver: bridge

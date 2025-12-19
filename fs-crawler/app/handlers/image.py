@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 import structlog
 
-from handlers.base import BaseMetadataHandler
+from .base import BaseMetadataHandler
 
 logger = structlog.get_logger()
 

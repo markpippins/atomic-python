@@ -18,17 +18,45 @@ router = APIRouter()
 @router.get("/libraries", response_model=List[dict])
 async def list_libraries():
     """List all configured library paths"""
-    async with get_mysql_session() as session:
-        # TODO: Implement proper SQLAlchemy query
-        return {"message": "Library listing not yet implemented"}
+    from database import async_session_maker
+    from sqlalchemy import select
+    async with async_session_maker() as session:
+        result = await session.execute(select(LibraryPath))
+        libraries = result.scalars().all()
+        return [lib.__dict__ for lib in libraries]
 
 
 @router.post("/libraries")
 async def add_library(path: str, name: Optional[str] = None, scan_enabled: bool = True):
     """Add a new library path"""
-    async with get_mysql_session() as session:
-        # TODO: Implement library path creation
-        return {"message": f"Library path {path} added"}
+    from database import async_session_maker
+    from sqlalchemy import select
+    from datetime import datetime
+
+    async with async_session_maker() as session:
+        # Check if library path already exists
+        result = await session.execute(select(LibraryPath).where(LibraryPath.path == path))
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Library path {path} already exists")
+
+        # Create new library path
+        library = LibraryPath(
+            path=path,
+            name=name or path.split('/')[-1],  # Use last part of path as name if not provided
+            scan_enabled=scan_enabled,
+            deep_scan=False,
+            path_type="general",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+
+        session.add(library)
+        await session.commit()
+        await session.refresh(library)
+
+        return {"message": f"Library path {path} added", "id": library.id}
 
 
 # Scanning Routes
@@ -50,22 +78,21 @@ async def start_scan(background_tasks: BackgroundTasks, path: Optional[str] = No
 @router.get("/scan/status")
 async def get_scan_status():
     """Get current scan status"""
-    redis_client = get_redis()
-    
-    # Get active scan operations from Redis
-    active_scans = await redis_client.keys("scan:active:*")
-    
-    return {
-        "active_scans": len(active_scans),
-        "scan_operations": active_scans
-    }
+    from services.scanner import ScannerService
+
+    scanner = ScannerService()
+    return await scanner.get_scan_status()
 
 
 @router.post("/scan/stop")
 async def stop_scan():
     """Stop all scan operations"""
-    # TODO: Implement scan stopping logic
-    return {"message": "Scan stop requested"}
+    from services.scanner import ScannerService
+
+    scanner = ScannerService()
+    stopped_count = await scanner.stop_all_scans()
+
+    return {"message": f"Stop requested for running scans", "stopped_count": stopped_count}
 
 
 # Search Routes
@@ -410,14 +437,22 @@ async def preview_duplicate_resolution(limit: int = 10):
 @router.get("/config/file-types")
 async def list_file_types():
     """List supported file types"""
-    async with get_mysql_session() as session:
-        # TODO: Implement file type listing
-        return {"message": "File type listing not yet implemented"}
+    from database import async_session_maker
+    from sqlalchemy import select
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(FileType))
+        file_types = result.scalars().all()
+        return [ft.__dict__ for ft in file_types]
 
 
 @router.get("/config/handlers")
 async def list_metadata_handlers():
     """List metadata handlers"""
-    async with get_mysql_session() as session:
-        # TODO: Implement handler listing
-        return {"message": "Handler listing not yet implemented"}
+    from database import async_session_maker
+    from sqlalchemy import select
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(MetadataHandler))
+        handlers = result.scalars().all()
+        return [handler.__dict__ for handler in handlers]

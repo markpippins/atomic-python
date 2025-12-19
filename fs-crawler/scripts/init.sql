@@ -22,7 +22,7 @@ CREATE TABLE library_paths (
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_path (path)
+    UNIQUE KEY unique_path (path(255))
 );
 
 -- File type registry (modernized from SQLFileType)
@@ -68,7 +68,7 @@ CREATE TABLE scan_operations (
     completed_at TIMESTAMP NULL,
     error_message TEXT,
     files_processed INT DEFAULT 0,
-    INDEX idx_path_type (path, operation_type),
+    INDEX idx_path_type (path(255), operation_type),
     INDEX idx_status (status)
 );
 

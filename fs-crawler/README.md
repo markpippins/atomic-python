@@ -57,7 +57,6 @@ docker-compose --profile debug up -d
 
 This includes:
 - Redis Commander (http://localhost:8081)
-- Mongo Express (http://localhost:8082)
 
 ## Configuration
 

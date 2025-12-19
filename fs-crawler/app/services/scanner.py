@@ -13,7 +13,7 @@ import structlog
 from database import get_redis, get_mongodb, get_mysql_session
 from models.mongodb_models import FileMetadata, DirectoryMetadata
 from models.mysql_models import LibraryPath, ScanOperation, OperationStatus
-from services.metadata_processor import MetadataProcessor
+from .metadata_processor import MetadataProcessor
 from config import settings
 
 logger = structlog.get_logger()
@@ -47,7 +47,8 @@ class ScannerService:
         """Scan all configured library paths"""
         await self._init_clients()
         
-        async with get_mysql_session() as session:
+        from database import async_session_maker
+        async with async_session_maker() as session:
             # TODO: Query all enabled library paths
             # For now, use a placeholder
             library_paths = ["/media/music", "/media/videos"]  # Placeholder
@@ -455,5 +456,36 @@ class ScannerService:
         
         if cleaned_count > 0:
             logger.info("Cleaned up old scan states", count=cleaned_count)
-        
+
         return cleaned_count
+
+    async def stop_all_scans(self):
+        """Stop all running scans by marking them as cancelled"""
+        await self._init_clients()
+
+        # Find all scan state keys
+        scan_keys = await self.redis_client.keys(f"{self.scan_key_prefix}state:*")
+
+        stopped_count = 0
+
+        for scan_key in scan_keys:
+            scan_state = await self.redis_client.hgetall(scan_key)
+
+            if scan_state.get("status") == "running":
+                # Mark scan as cancelled
+                stop_data = {
+                    "status": "cancelled",
+                    "cancelled_at": datetime.utcnow().isoformat()
+                }
+
+                await self.redis_client.hset(scan_key, mapping=stop_data)
+
+                # Set expiration for cancelled scan state (cleanup later)
+                await self.redis_client.expire(scan_key, 86400)
+
+                stopped_count += 1
+
+        if stopped_count > 0:
+            logger.info("Stopped running scans", count=stopped_count)
+
+        return stopped_count
