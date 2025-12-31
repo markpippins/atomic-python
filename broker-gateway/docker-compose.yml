@@ -1,7 +1,6 @@
-version: '3.8'
-
 services:
   python-broker-gateway:
+    container_name: python-broker-gateway
     build: .
     ports:
       - "8050:8050"
@@ -10,7 +9,7 @@ services:
     environment:
       - PYTHONPATH=/app
       - PORT=8050
-      - SERVICE_REGISTRY_URL=http://172.16.30.15:8085/api/registry
+      - SERVICE_REGISTRY_URL=http://localhost:8085/api/registry
       - SERVICE_HOST=localhost
     restart: unless-stopped
     networks:

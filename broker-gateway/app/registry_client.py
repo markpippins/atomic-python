@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class RegistryClient:
     def __init__(self, registry_url: str = None, service_name: str = "python-broker-gateway"):
-        self.registry_url = registry_url or "http://172.16.30.15:8085/api/registry"
+        self.registry_url = registry_url or "http://localhost:8085/api/registry"
         self.service_name = service_name
         self.heartbeat_task = None
         self.client = None
