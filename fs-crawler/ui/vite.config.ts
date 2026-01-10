@@ -14,15 +14,15 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://app:8000',
+        target: 'http://localhost:8004',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://app:8000',
+        target: 'http://localhost:8004',
         changeOrigin: true,
       },
       '/system': {
-        target: 'http://app:8000',
+        target: 'http://localhost:8004',
         changeOrigin: true,
       }
     }
