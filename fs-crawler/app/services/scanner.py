@@ -10,11 +10,23 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import structlog
 
-from database import get_redis, get_mongodb, get_mysql_session
-from models.mongodb_models import FileMetadata, DirectoryMetadata
-from models.mysql_models import LibraryPath, ScanOperation, OperationStatus
-from .metadata_processor import MetadataProcessor
-from config import settings
+# Handle imports differently when run as a script vs module
+try:
+    from ..database import get_redis, get_mongodb, get_mysql_session
+    from ..models.mongodb_models import FileMetadata, DirectoryMetadata
+    from ..models.mysql_models import LibraryPath, ScanOperation, OperationStatus
+    from .metadata_processor import MetadataProcessor  # Same directory
+    from ..config import settings
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    sys.path.append(str(Path(__file__).parents[2]))  # Go up two levels to app/
+
+    from database import get_redis, get_mongodb, get_mysql_session
+    from models.mongodb_models import FileMetadata, DirectoryMetadata
+    from models.mysql_models import LibraryPath, ScanOperation, OperationStatus
+    from services.metadata_processor import MetadataProcessor
+    from config import settings
 
 logger = structlog.get_logger()
 
@@ -95,23 +107,27 @@ class ScannerService:
             
             while file_queue:
                 file_path = file_queue.pop(0)
-                
+
+                # Update current directory being scanned
+                current_dir = os.path.dirname(file_path)
+                await self.redis_client.hset(scan_key, "current_directory", current_dir)
+
                 # Skip if already processed (unless deep scan)
                 if not deep_scan and await self._is_file_processed(file_path):
                     await self._mark_file_completed(scan_key, file_path)
                     continue
-                
+
                 batch.append(file_path)
-                
+
                 # Process batch when it reaches the configured size
                 if len(batch) >= settings.scan_batch_size:
                     processed = await self._process_file_batch_with_checkpoints(batch, scan_key)
                     files_processed += processed
                     batch = []
-                    
+
                     # Update progress checkpoint
                     await self._update_scan_checkpoint(scan_key, files_processed, file_queue)
-                
+
                 # Periodic checkpoint even within batches
                 if files_processed % checkpoint_interval == 0:
                     await self._update_scan_checkpoint(scan_key, files_processed, file_queue)
@@ -232,19 +248,59 @@ class ScannerService:
     async def get_scan_status(self) -> Dict[str, Any]:
         """Get current scan status"""
         await self._init_clients()
-        
-        # Get all active scans
-        active_keys = await self.redis_client.keys(f"{self.scan_key_prefix}active:*")
-        active_scans = []
-        
-        for key in active_keys:
+
+        # Get all scan states (both active and inactive)
+        scan_keys = await self.redis_client.keys(f"{self.scan_key_prefix}state:*")
+        all_scans = []
+
+        for key in scan_keys:
             scan_data = await self.redis_client.hgetall(key)
             if scan_data:
-                active_scans.append(scan_data)
-        
+                # Convert string values to appropriate types where needed
+                if 'files_processed' in scan_data:
+                    try:
+                        scan_data['files_processed'] = int(scan_data['files_processed'])
+                    except ValueError:
+                        scan_data['files_processed'] = 0
+
+                # Parse JSON fields
+                import json
+                if 'completed_files' in scan_data:
+                    try:
+                        scan_data['completed_files'] = json.loads(scan_data['completed_files'])
+                    except (json.JSONDecodeError, TypeError):
+                        scan_data['completed_files'] = []
+
+                if 'remaining_queue' in scan_data:
+                    try:
+                        scan_data['remaining_queue'] = json.loads(scan_data['remaining_queue'])
+                    except (json.JSONDecodeError, TypeError):
+                        scan_data['remaining_queue'] = []
+
+                # Calculate progress percentage if possible
+                total_expected = len(scan_data.get('completed_files', [])) + len(scan_data.get('remaining_queue', []))
+                if total_expected > 0:
+                    scan_data['progress_percentage'] = round(
+                        (scan_data.get('files_processed', 0) / total_expected) * 100, 2
+                    )
+                else:
+                    scan_data['progress_percentage'] = 0
+
+                # Determine active/inactive based on status
+                scan_data['is_active'] = scan_data.get('status') in ['running', 'pending']
+
+                all_scans.append(scan_data)
+
+        # Separate active and inactive scans
+        active_scans = [scan for scan in all_scans if scan.get('is_active')]
+        inactive_scans = [scan for scan in all_scans if not scan.get('is_active')]
+
         return {
             "active_scans": len(active_scans),
-            "scans": active_scans
+            "inactive_scans": len(inactive_scans),
+            "total_scans": len(all_scans),
+            "scans": all_scans,
+            "active_scan_details": active_scans
         }
     
     async def _get_or_create_scan_state(self, root_path: str, deep_scan: bool) -> Dict[str, Any]:

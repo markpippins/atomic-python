@@ -8,9 +8,20 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import structlog
 
-from config import settings
-from database import init_databases, close_databases, get_redis, get_mongodb
-from api.routes import router
+# Handle imports differently when run as a script vs module
+try:
+    from .config import settings
+    from .database import init_databases, close_databases, get_redis, get_mongodb
+    from .api.routes import router
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent))
+
+    from config import settings
+    from database import init_databases, close_databases, get_redis, get_mongodb
+    from api.routes import router
 
 
 # Configure structured logging

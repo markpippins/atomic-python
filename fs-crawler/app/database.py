@@ -11,7 +11,16 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy import text
 import structlog
 
-from config import settings
+# Handle imports differently when run as a script vs module
+try:
+    from .config import settings
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent))  # Same directory
+
+    from config import settings
 
 logger = structlog.get_logger()
 

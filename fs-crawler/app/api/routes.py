@@ -6,9 +6,20 @@ from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import List, Optional
 import structlog
 
-from database import get_redis, get_mongodb, get_mysql_session
-from models.mysql_models import LibraryPath, FileType, MetadataHandler
-from services.scanner import ScannerService
+# Handle imports differently when run as a script vs module
+try:
+    from ..database import get_redis, get_mongodb, get_mysql_session
+    from ..models.mysql_models import LibraryPath, FileType, MetadataHandler
+    from ..services.scanner import ScannerService
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parents[2]))  # Go up two levels to app/
+
+    from database import get_redis, get_mongodb, get_mysql_session
+    from models.mysql_models import LibraryPath, FileType, MetadataHandler
+    from services.scanner import ScannerService
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -23,15 +34,40 @@ async def list_libraries():
     async with async_session_maker() as session:
         result = await session.execute(select(LibraryPath))
         libraries = result.scalars().all()
-        return [lib.__dict__ for lib in libraries]
+
+        # Convert SQLAlchemy objects to dictionaries properly
+        libraries_list = []
+        for lib in libraries:
+            lib_dict = {}
+            for column in lib.__table__.columns:
+                lib_dict[column.name] = getattr(lib, column.name)
+            libraries_list.append(lib_dict)
+
+        return libraries_list
 
 
 @router.post("/libraries")
-async def add_library(path: str, name: Optional[str] = None, scan_enabled: bool = True):
+async def add_library(request_data: dict):
     """Add a new library path"""
     from database import async_session_maker
     from sqlalchemy import select
     from datetime import datetime
+
+    # Extract required fields
+    path = request_data.get("path")
+    if not path:
+        raise HTTPException(status_code=400, detail="Path is required")
+
+    # Extract optional fields
+    name = request_data.get("name") or path.split('/')[-1]
+    scan_enabled = request_data.get("scan_enabled", True)
+    deep_scan = request_data.get("deep_scan", False)
+    path_type = request_data.get("path_type", "general")
+    auto_delete_duplicates = request_data.get("auto_delete_duplicates", False)
+    delete_lower_quality = request_data.get("delete_lower_quality", True)
+    quality_threshold = request_data.get("quality_threshold", 100)
+    preferred_formats = request_data.get("preferred_formats", "FLAC,MP3")
+    deletion_priority = request_data.get("deletion_priority", 50)
 
     async with async_session_maker() as session:
         # Check if library path already exists
@@ -44,10 +80,15 @@ async def add_library(path: str, name: Optional[str] = None, scan_enabled: bool 
         # Create new library path
         library = LibraryPath(
             path=path,
-            name=name or path.split('/')[-1],  # Use last part of path as name if not provided
+            name=name,
             scan_enabled=scan_enabled,
-            deep_scan=False,
-            path_type="general",
+            deep_scan=deep_scan,
+            path_type=path_type,
+            auto_delete_duplicates=auto_delete_duplicates,
+            delete_lower_quality=delete_lower_quality,
+            quality_threshold=quality_threshold,
+            preferred_formats=preferred_formats,
+            deletion_priority=deletion_priority,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -57,6 +98,83 @@ async def add_library(path: str, name: Optional[str] = None, scan_enabled: bool 
         await session.refresh(library)
 
         return {"message": f"Library path {path} added", "id": library.id}
+
+
+@router.put("/libraries/{library_id}")
+async def update_library(library_id: int, request_data: dict):
+    """Update an existing library path"""
+    from database import async_session_maker
+    from sqlalchemy import select
+    from datetime import datetime
+
+    async with async_session_maker() as session:
+        # Get the existing library
+        result = await session.execute(select(LibraryPath).where(LibraryPath.id == library_id))
+        library = result.scalar_one_or_none()
+
+        if not library:
+            raise HTTPException(status_code=404, detail="Library path not found")
+
+        # Update fields if provided in request_data
+        if "path" in request_data:
+            # Check if the new path already exists for another library
+            existing_result = await session.execute(
+                select(LibraryPath).where(
+                    LibraryPath.path == request_data["path"],
+                    LibraryPath.id != library_id
+                )
+            )
+            existing = existing_result.scalar_one_or_none()
+            if existing:
+                raise HTTPException(status_code=400, detail=f"Library path {request_data['path']} already exists")
+            library.path = request_data["path"]
+
+        if "name" in request_data:
+            library.name = request_data["name"]
+        if "scan_enabled" in request_data:
+            library.scan_enabled = request_data["scan_enabled"]
+        if "deep_scan" in request_data:
+            library.deep_scan = request_data["deep_scan"]
+        if "path_type" in request_data:
+            library.path_type = request_data["path_type"]
+        if "auto_delete_duplicates" in request_data:
+            library.auto_delete_duplicates = request_data["auto_delete_duplicates"]
+        if "delete_lower_quality" in request_data:
+            library.delete_lower_quality = request_data["delete_lower_quality"]
+        if "quality_threshold" in request_data:
+            library.quality_threshold = request_data["quality_threshold"]
+        if "preferred_formats" in request_data:
+            library.preferred_formats = request_data["preferred_formats"]
+        if "deletion_priority" in request_data:
+            library.deletion_priority = request_data["deletion_priority"]
+
+        # Update the timestamp
+        library.updated_at = datetime.utcnow()
+
+        await session.commit()
+        await session.refresh(library)
+
+        return {"message": f"Library path {library.path} updated", "id": library.id}
+
+
+@router.delete("/libraries/{library_id}")
+async def delete_library(library_id: int):
+    """Delete a library path"""
+    from database import async_session_maker
+    from sqlalchemy import delete
+    from datetime import datetime
+
+    async with async_session_maker() as session:
+        # Delete the library
+        stmt = delete(LibraryPath).where(LibraryPath.id == library_id)
+        result = await session.execute(stmt)
+
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Library path not found")
+
+        await session.commit()
+
+        return {"message": "Library path deleted successfully", "id": library_id}
 
 
 # Scanning Routes

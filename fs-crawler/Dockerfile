@@ -21,6 +21,6 @@ COPY app/ ./
 RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
 USER app
 
-EXPOSE 8000
+EXPOSE 8004
 
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004", "--reload"]

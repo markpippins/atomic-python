@@ -28,8 +28,8 @@ sleep 10
 echo "🔍 Checking service health..."
 
 # Check API health
-if curl -s http://localhost:8000/health > /dev/null; then
-    echo "✅ API service is healthy (http://localhost:8000)"
+if curl -s http://localhost:8004/health > /dev/null; then
+    echo "✅ API service is healthy (http://localhost:8004)"
 else
     echo "⚠️  API service may still be starting up"
 fi
@@ -46,9 +46,9 @@ echo "🎉 Services started successfully!"
 echo ""
 echo "📊 Access points:"
 echo "   • Web UI:           http://localhost:3000"
-echo "   • API:              http://localhost:8000"
-echo "   • API Docs:         http://localhost:8000/docs"
-echo "   • System Status:    http://localhost:8000/system/status"
+echo "   • API:              http://localhost:8004"
+echo "   • API Docs:         http://localhost:8004/docs"
+echo "   • System Status:    http://localhost:8004/system/status"
 echo ""
 echo "🛠️  Development tools (with --profile debug):"
 echo "   • Redis Commander:  http://localhost:8081"

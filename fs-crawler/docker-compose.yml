@@ -4,10 +4,10 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      - "8004:8004"
     environment:
       - REDIS_URL=redis://redis:6379
-      - MONGODB_URL=mongodb://mongoUser:somePassword@172.16.30.15:27017/broker-gateway?authSource=admin
+      - MONGODB_URL=mongodb://mongoUser:somePassword@172.16.30.32:27017/?authSource=admin
       - MYSQL_URL=mysql://media:changeme@mysql:3306/media
       - PYTHONPATH=/app
     volumes:

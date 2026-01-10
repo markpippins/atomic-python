@@ -7,7 +7,17 @@ from datetime import datetime
 from enum import Enum
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
-from database import Base
+
+# Handle imports differently when run as a script vs module
+try:
+    from ..database import Base
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parents[2]))  # Go up two levels to app/
+
+    from database import Base
 
 
 class PathType(str, Enum):
@@ -41,13 +51,18 @@ class OperationStatus(str, Enum):
 class LibraryPath(Base):
     """Library paths configuration table"""
     __tablename__ = "library_paths"
-    
+
     id = Column(Integer, primary_key=True, autoincrement=True)
-    path = Column(String(1000), nullable=False, unique=True)
+    path = Column(String(500), nullable=False, unique=True)  # Changed to 500 to avoid key length issues
     name = Column(String(255))
     scan_enabled = Column(Boolean, default=True)
     deep_scan = Column(Boolean, default=False)
     path_type = Column(SQLEnum(PathType), default=PathType.GENERAL)
+    auto_delete_duplicates = Column(Boolean, default=False)
+    delete_lower_quality = Column(Boolean, default=True)
+    quality_threshold = Column(Integer, default=100)
+    preferred_formats = Column(String(255), default="FLAC,MP3")
+    deletion_priority = Column(Integer, default=50)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

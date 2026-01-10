@@ -7,9 +7,20 @@ import asyncio
 from datetime import datetime
 import structlog
 
-from database import get_redis, get_mongodb, get_mysql_session
-from services.scanner import ScannerService
-from config import settings
+# Handle imports differently when run as a script vs module
+try:
+    from ..database import get_redis, get_mongodb, get_mysql_session
+    from .scanner import ScannerService  # Same directory
+    from ..config import settings
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parents[2]))  # Go up two levels to app/
+
+    from database import get_redis, get_mongodb, get_mysql_session
+    from services.scanner import ScannerService
+    from config import settings
 
 logger = structlog.get_logger()
 

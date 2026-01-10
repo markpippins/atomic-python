@@ -1,0 +1,22 @@
+/mnt/c/dev/WORK/atomic/python/fs-crawler/venv/lib/python3.12/site-packages/pydantic/_internal/_config.py:341: UserWarning: Valid config keys have changed in V2:
+* 'allow_population_by_field_name' has been renamed to 'populate_by_name'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [25977]
+INFO:     Waiting for application startup.
+{"error": "Database objects do not implement truth value testing or bool(). Please compare with None instead: database is not None", "event": "Stale data cleanup failed", "logger": "services.startup", "level": "warning", "timestamp": "2026-01-10T07:05:48.368612Z"}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8004 (Press CTRL+C to quit)
+ERROR:    Traceback (most recent call last):
+  File "/mnt/c/dev/WORK/atomic/python/fs-crawler/venv/lib/python3.12/site-packages/starlette/routing.py", line 686, in lifespan
+    await receive()
+  File "/mnt/c/dev/WORK/atomic/python/fs-crawler/venv/lib/python3.12/site-packages/uvicorn/lifespan/on.py", line 137, in receive
+    return await self.receive_queue.get()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/queues.py", line 158, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+Starting Media Metadata Service...
+Access the API at: http://localhost:8004
+API Documentation: http://localhost:8004/docs
+Press Ctrl+C to stop the server
