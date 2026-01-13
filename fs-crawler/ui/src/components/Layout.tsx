@@ -15,6 +15,9 @@ import {
   Typography,
   Chip,
   Tooltip,
+  Divider,
+  Avatar,
+  Badge,
 } from '@mui/material'
 import {
   Menu as MenuIcon,
@@ -25,11 +28,13 @@ import {
   Brightness4 as DarkModeIcon,
   Brightness7 as LightModeIcon,
   Circle as CircleIcon,
+  Storage as StorageIcon,
+  Settings as SettingsIcon,
 } from '@mui/icons-material'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useSystemStatus, useHealth } from '@/hooks/useApi'
 
-const drawerWidth = 240
+const drawerWidth = 280
 
 interface LayoutProps {
   children: React.ReactNode
@@ -40,7 +45,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { mode, toggleTheme } = useTheme()
   const location = useLocation()
   const navigate = useNavigate()
-  
+
   const { data: systemStatus } = useSystemStatus()
   const { data: health } = useHealth()
 
@@ -73,26 +78,79 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }
 
   const drawer = (
-    <div>
-      <Toolbar>
-        <Typography variant="h6" noWrap component="div">
-          Media Metadata
-        </Typography>
-      </Toolbar>
-      <List>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 3, pb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Avatar sx={{ bgcolor: 'primary.main', width: 48, height: 48 }}>
+          <StorageIcon />
+        </Avatar>
+        <Box>
+          <Typography variant="h6" component="div" sx={{ fontWeight: 600 }}>
+            FS Crawler
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Media Metadata Service
+          </Typography>
+        </Box>
+      </Box>
+
+      <Divider />
+
+      <List sx={{ py: 1 }}>
         {menuItems.map((item) => (
           <ListItem key={item.text} disablePadding>
             <ListItemButton
               selected={location.pathname === item.path}
               onClick={() => navigate(item.path)}
+              sx={{
+                mx: 1.5,
+                borderRadius: 2,
+                mb: 0.5,
+                '&.Mui-selected': {
+                  backgroundColor: 'primary.main',
+                  color: 'primary.contrastText',
+                  '&:hover': {
+                    backgroundColor: 'primary.dark',
+                  },
+                },
+              }}
             >
-              <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
+              <ListItemIcon sx={{
+                minWidth: 40,
+                color: location.pathname === item.path ? 'primary.contrastText' : 'inherit'
+              }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.text}
+                sx={{
+                  '& .MuiListItemText-primary': {
+                    fontWeight: 500,
+                  }
+                }}
+              />
             </ListItemButton>
           </ListItem>
         ))}
       </List>
-    </div>
+
+      <Box sx={{ mt: 'auto', p: 2, pt: 0 }}>
+        <Divider sx={{ mb: 2 }} />
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          <IconButton
+            color="inherit"
+            onClick={toggleTheme}
+            sx={{
+              backgroundColor: 'action.hover',
+              borderRadius: '50%',
+              width: 40,
+              height: 40,
+            }}
+          >
+            {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+          </IconButton>
+        </Box>
+      </Box>
+    </Box>
   )
 
   return (
@@ -103,9 +161,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         sx={{
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
+          backgroundColor: 'background.paper',
+          color: 'text.primary',
+          zIndex: (theme) => theme.zIndex.drawer - 1,
         }}
       >
-        <Toolbar>
+        <Toolbar sx={{ pr: '24px' }}>
           <IconButton
             color="inherit"
             aria-label="open drawer"
@@ -115,25 +176,46 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           >
             <MenuIcon />
           </IconButton>
-          
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+
+          <Typography
+            variant="h6"
+            noWrap
+            component="div"
+            sx={{
+              flexGrow: 1,
+              fontWeight: 600,
+              color: 'text.primary',
+            }}
+          >
             {menuItems.find(item => item.path === location.pathname)?.text || 'Dashboard'}
           </Typography>
 
           {/* System Status Indicators */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             {systemStatus && (
               <Tooltip title={`System: ${systemStatus.system_status}`}>
-                <Chip
-                  icon={<CircleIcon />}
-                  label={systemStatus.system_status}
-                  size="small"
-                  color={getStatusColor(systemStatus.system_status)}
-                  variant="outlined"
-                />
+                <Badge
+                  variant="dot"
+                  color={getStatusColor(systemStatus.system_status) as any}
+                  overlap="circular"
+                >
+                  <Chip
+                    icon={<CircleIcon />}
+                    label={systemStatus.system_status}
+                    size="small"
+                    color={getStatusColor(systemStatus.system_status)}
+                    variant="outlined"
+                    sx={{
+                      height: 32,
+                      '& .MuiChip-icon': {
+                        marginLeft: 0.5,
+                      }
+                    }}
+                  />
+                </Badge>
               </Tooltip>
             )}
-            
+
             {health && (
               <Tooltip title="Database Health">
                 <Chip
@@ -142,6 +224,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   size="small"
                   color={getStatusColor(health.status)}
                   variant="outlined"
+                  sx={{
+                    height: 32,
+                    '& .MuiChip-icon': {
+                      marginLeft: 0.5,
+                    }
+                  }}
                 />
               </Tooltip>
             )}
@@ -149,25 +237,35 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {systemStatus && systemStatus.active_scans > 0 && (
               <Tooltip title={`${systemStatus.active_scans} active scans`}>
                 <Chip
-                  icon={<ScannerIcon />}
+                  icon={<ScannerIcon className="pulse" />}
                   label={systemStatus.active_scans}
                   size="small"
                   color="info"
-                  className="pulse"
+                  sx={{
+                    height: 32,
+                    '& .MuiChip-icon': {
+                      marginLeft: 0.5,
+                    }
+                  }}
                 />
               </Tooltip>
             )}
           </Box>
-
-          <IconButton color="inherit" onClick={toggleTheme}>
-            {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
-          </IconButton>
         </Toolbar>
       </AppBar>
-      
+
       <Box
         component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+        sx={{
+          width: { sm: drawerWidth },
+          flexShrink: { sm: 0 },
+          '& .MuiDrawer-paper': {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+            backgroundColor: 'background.default',
+            color: 'text.primary',
+          },
+        }}
         aria-label="navigation menu"
       >
         <Drawer
@@ -179,7 +277,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           }}
           sx={{
             display: { xs: 'block', sm: 'none' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: drawerWidth,
+              backgroundColor: 'background.paper',
+              color: 'text.primary',
+            },
           }}
         >
           {drawer}
@@ -188,23 +291,31 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           variant="permanent"
           sx={{
             display: { xs: 'none', sm: 'block' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: drawerWidth,
+              borderRight: 'none',
+              backgroundColor: 'background.paper',
+              color: 'text.primary',
+            },
           }}
           open
         >
           {drawer}
         </Drawer>
       </Box>
-      
+
       <Box
         component="main"
         sx={{
           flexGrow: 1,
           p: 3,
           width: { sm: `calc(100% - ${drawerWidth}px)` },
+          backgroundColor: 'background.default',
+          minHeight: '100vh',
+          mt: '64px', // Account for fixed AppBar
         }}
       >
-        <Toolbar />
         {children}
       </Box>
     </Box>

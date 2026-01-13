@@ -55,7 +55,10 @@ async def lifespan(app: FastAPI):
     logger.info("Database connections initialized")
     
     # Initialize system and resume operations
-    from .services.startup import StartupService
+    try:
+        from .services.startup import StartupService
+    except ImportError:
+        from services.startup import StartupService
     startup_service = StartupService()
     await startup_service.initialize_system()
     

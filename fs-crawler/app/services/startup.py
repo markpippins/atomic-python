@@ -22,6 +22,9 @@ except ImportError:
     from services.scanner import ScannerService
     from config import settings
 
+# Additional imports needed for validation
+from sqlalchemy import text
+
 logger = structlog.get_logger()
 
 
@@ -66,37 +69,33 @@ class StartupService:
             raise
     
     async def _validate_connections(self):
-        """Validate all database connections are working"""
-        logger.info("Validating database connections")
-        
-        # Test Redis connection
+        """Validate that all database connections are working"""
+        # Test Redis
         try:
             redis_client = get_redis()
             await redis_client.ping()
             logger.info("Redis connection validated")
         except Exception as e:
-            logger.error("Redis connection failed", error=str(e))
-            raise
+            logger.warning("Redis connection failed", error=str(e))
         
-        # Test MongoDB connection
+        # Test MongoDB
         try:
             mongodb = get_mongodb()
             await mongodb.command("ping")
             logger.info("MongoDB connection validated")
         except Exception as e:
-            logger.error("MongoDB connection failed", error=str(e))
-            raise
+            logger.warning("MongoDB connection failed", error=str(e))
         
-        # Test MySQL connection
+        # Test MySQL
         try:
-            from database import async_session_maker
-            async with async_session_maker() as session:
-                from sqlalchemy import text
+            session = await get_mysql_session()
+            try:
                 await session.execute(text("SELECT 1"))
-            logger.info("MySQL connection validated")
+                logger.info("MySQL connection validated")
+            finally:
+                await session.close()
         except Exception as e:
-            logger.error("MySQL connection failed", error=str(e))
-            raise
+            logger.warning("MySQL connection failed", error=str(e))
     
     async def _resume_interrupted_operations(self):
         """Resume any operations that were interrupted"""

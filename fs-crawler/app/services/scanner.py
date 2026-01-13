@@ -74,37 +74,43 @@ class ScannerService:
     async def scan_path(self, root_path: str, deep_scan: bool = False):
         """
         Resumable scan of a specific path for media files
-        
+
         Key features for robustness:
         - Persistent state in Redis for resume capability
         - Checkpoint-based progress tracking
         - Graceful handling of interruptions
-        
+
         Args:
             root_path: Root directory to scan
             deep_scan: Whether to perform deep scanning (re-process existing files)
         """
         await self._init_clients()
-        
+
         # Check for existing scan state
         scan_state = await self._get_or_create_scan_state(root_path, deep_scan)
         scan_id = scan_state["scan_id"]
         scan_key = f"{self.scan_key_prefix}state:{scan_id}"
-        
+
         try:
-            logger.info("Starting/resuming scan", 
-                       path=root_path, 
-                       scan_id=scan_id, 
+            logger.info("Starting/resuming scan",
+                       path=root_path,
+                       scan_id=scan_id,
                        deep_scan=deep_scan,
                        resume=scan_state.get("resume", False))
-            
+
             # Build file list with resume capability
             file_queue = await self._build_resumable_file_queue(root_path, scan_state)
-            
+
             files_processed = scan_state.get("files_processed", 0)
+            total_files = len(file_queue) + files_processed
             batch = []
             checkpoint_interval = 50  # Save state every 50 files
-            
+
+            logger.info("Scan initialized",
+                       path=root_path,
+                       total_files=total_files,
+                       files_already_processed=files_processed)
+
             while file_queue:
                 file_path = file_queue.pop(0)
 
@@ -112,15 +118,25 @@ class ScannerService:
                 current_dir = os.path.dirname(file_path)
                 await self.redis_client.hset(scan_key, "current_directory", current_dir)
 
+                # Update current file being scanned
+                await self.redis_client.hset(scan_key, "current_file", file_path)
+
                 # Skip if already processed (unless deep scan)
                 if not deep_scan and await self._is_file_processed(file_path):
                     await self._mark_file_completed(scan_key, file_path)
+                    files_processed += 1
+                    logger.debug("Skipped previously processed file", path=file_path)
                     continue
 
                 batch.append(file_path)
 
                 # Process batch when it reaches the configured size
                 if len(batch) >= settings.scan_batch_size:
+                    logger.info("Processing batch",
+                               batch_size=len(batch),
+                               files_processed=files_processed,
+                               remaining_files=len(file_queue))
+
                     processed = await self._process_file_batch_with_checkpoints(batch, scan_key)
                     files_processed += processed
                     batch = []
@@ -128,20 +144,34 @@ class ScannerService:
                     # Update progress checkpoint
                     await self._update_scan_checkpoint(scan_key, files_processed, file_queue)
 
+                    # Log progress
+                    progress_percent = (files_processed / total_files) * 100 if total_files > 0 else 0
+                    logger.info("Scan progress",
+                               files_processed=files_processed,
+                               total_files=total_files,
+                               progress_percent=round(progress_percent, 2))
+
                 # Periodic checkpoint even within batches
                 if files_processed % checkpoint_interval == 0:
                     await self._update_scan_checkpoint(scan_key, files_processed, file_queue)
-            
+
             # Process remaining files in batch
             if batch:
+                logger.info("Processing final batch",
+                           batch_size=len(batch),
+                           files_processed=files_processed)
+
                 processed = await self._process_file_batch_with_checkpoints(batch, scan_key)
                 files_processed += processed
-            
+
             # Mark scan as completed and cleanup
             await self._complete_scan(scan_key, files_processed)
-            
-            logger.info("Scan completed", path=root_path, files_processed=files_processed)
-            
+
+            logger.info("Scan completed",
+                       path=root_path,
+                       files_processed=files_processed,
+                       total_files=total_files)
+
         except Exception as e:
             logger.error("Scan failed", path=root_path, error=str(e))
             await self._mark_scan_failed(scan_key, str(e))
@@ -194,38 +224,43 @@ class ScannerService:
     async def _process_single_file(self, file_path: str) -> bool:
         """Process a single file and extract metadata"""
         try:
+            # Log which file is currently being scanned
+            logger.info("Processing file", path=file_path)
+
             # Get file stats
             stat_info = os.stat(file_path)
-            
+
             # Skip files that are too large
             if stat_info.st_size > settings.max_file_size_mb * 1024 * 1024:
                 logger.debug("Skipping large file", path=file_path, size=stat_info.st_size)
                 return False
-            
+
             # Extract metadata using the metadata processor
             metadata = await self.metadata_processor.process_file(file_path)
-            
+
             if metadata:
                 # Check if file already exists in MongoDB
                 existing = await self.mongodb.file_metadata.find_one(
                     {"absolute_path": file_path}
                 )
-                
+
                 if existing:
                     # Update existing document
                     await self.mongodb.file_metadata.update_one(
                         {"_id": existing["_id"]},
                         {"$set": metadata.dict(by_alias=True, exclude={"id"})}
                     )
+                    logger.info("Updated existing file metadata", path=file_path)
                 else:
                     # Insert new document
                     await self.mongodb.file_metadata.insert_one(metadata.dict(by_alias=True))
-                
+                    logger.info("Added new file metadata", path=file_path)
+
                 return True
-            
+
         except Exception as e:
             logger.error("Failed to process file", path=file_path, error=str(e))
-        
+
         return False
     
     def _is_supported_file(self, filename: str) -> bool:
@@ -288,6 +323,10 @@ class ScannerService:
 
                 # Determine active/inactive based on status
                 scan_data['is_active'] = scan_data.get('status') in ['running', 'pending']
+
+                # Add current file and directory being scanned
+                scan_data['current_file'] = scan_data.get('current_file', '')
+                scan_data['current_directory'] = scan_data.get('current_directory', '')
 
                 all_scans.append(scan_data)
 
@@ -382,17 +421,35 @@ class ScannerService:
     async def _process_file_batch_with_checkpoints(self, file_paths: List[str], scan_key: str) -> int:
         """Process file batch and update checkpoints"""
         import json
-        
+
         successful = 0
-        
-        for file_path in file_paths:
+        batch_start_time = datetime.utcnow()
+
+        logger.info("Starting batch processing", batch_size=len(file_paths))
+
+        for idx, file_path in enumerate(file_paths, 1):
             try:
+                logger.debug("Processing file in batch",
+                           file_path=file_path,
+                           batch_position=f"{idx}/{len(file_paths)}")
+
                 if await self._process_single_file(file_path):
                     successful += 1
                     await self._mark_file_completed(scan_key, file_path)
+
+                    # Update current file being processed in Redis
+                    await self.redis_client.hset(scan_key, "current_file", file_path)
             except Exception as e:
                 logger.error("Failed to process file in batch", file=file_path, error=str(e))
-        
+
+        batch_end_time = datetime.utcnow()
+        batch_duration = (batch_end_time - batch_start_time).total_seconds()
+
+        logger.info("Batch processing completed",
+                   successful=successful,
+                   failed=len(file_paths) - successful,
+                   duration_seconds=batch_duration)
+
         return successful
     
     async def _mark_file_completed(self, scan_key: str, file_path: str):
