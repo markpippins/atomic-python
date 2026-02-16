@@ -14,13 +14,20 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy scripts first (before app directory to prevent overwriting)
+COPY wait-for-it.sh ./
+COPY start-with-dependencies.sh ./
+
 # Copy application code
 COPY app/ ./
+
+# Make scripts executable
+RUN chmod +x wait-for-it.sh start-with-dependencies.sh
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
 USER app
 
-EXPOSE 8000
+EXPOSE 8004
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004", "--reload"]
