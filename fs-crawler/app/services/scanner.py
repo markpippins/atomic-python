@@ -7,14 +7,26 @@ import os
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
 import structlog
 
-from database import get_redis, get_mongodb, get_mysql_session
-from models.mongodb_models import FileMetadata, DirectoryMetadata
-from models.mysql_models import LibraryPath, ScanOperation, OperationStatus
-from services.metadata_processor import MetadataProcessor
-from config import settings
+# Handle imports differently when run as a script vs module
+try:
+    from ..database import get_redis, get_mongodb, get_mysql_session
+    from ..models.mongodb_models import FileMetadata, DirectoryMetadata
+    from ..models.mysql_models import LibraryPath, ScanOperation, OperationStatus
+    from .metadata_processor import MetadataProcessor  # Same directory
+    from ..config import settings
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    sys.path.append(str(Path(__file__).parents[2]))  # Go up two levels to app/
+
+    from database import get_redis, get_mongodb, get_mysql_session
+    from ..models.mongodb_models import FileMetadata, DirectoryMetadata
+    from ..models.mysql_models import LibraryPath, ScanOperation, OperationStatus
+    from services.metadata_processor import MetadataProcessor
+    from ..config import settings
 
 logger = structlog.get_logger()
 
@@ -22,37 +34,46 @@ logger = structlog.get_logger()
 class ScannerService:
     """
     Modernized file scanner service
-    
+
     Key improvements over original:
     - Async/await instead of blocking operations
     - Proper error handling and recovery
     - Cleaner state management with Redis
     - Batch processing for better performance
+    - Proper scan cancellation support
     """
-    
+
     def __init__(self):
         self.redis_client = None
         self.mongodb = None
         self.metadata_processor = MetadataProcessor()
         self.scan_key_prefix = settings.redis_scan_key_prefix
+        self.active_scan_tasks: Dict[str, asyncio.Task] = {}  # Track active scan tasks
+        self.cancelled_scans: Set[str] = set()  # Track cancelled scans
         
     async def _init_clients(self):
         """Initialize database clients if not already done"""
-        if not self.redis_client:
+        if self.redis_client is None:
             self.redis_client = get_redis()
-        if not self.mongodb:
+        if self.mongodb is None:
             self.mongodb = get_mongodb()
     
     async def scan_all_libraries(self):
         """Scan all configured library paths"""
         await self._init_clients()
-        
-        async with get_mysql_session() as session:
-            # TODO: Query all enabled library paths
-            # For now, use a placeholder
-            library_paths = ["/media/music", "/media/videos"]  # Placeholder
-            
+
+        from database import async_session_maker
+        async with async_session_maker() as session:
+            # Query all enabled library paths
+            from sqlalchemy import select
+            result = await session.execute(select(LibraryPath).where(LibraryPath.scan_enabled == True))
+            libraries = result.scalars().all()
+            library_paths = [lib.path for lib in libraries]
+
         for path in library_paths:
+            # Check if the entire scan operation has been cancelled
+            # This would be handled by the calling context
+
             if os.path.exists(path) and os.access(path, os.R_OK):
                 await self.scan_path(path)
             else:
@@ -61,74 +82,143 @@ class ScannerService:
     async def scan_path(self, root_path: str, deep_scan: bool = False):
         """
         Resumable scan of a specific path for media files
-        
+
         Key features for robustness:
         - Persistent state in Redis for resume capability
         - Checkpoint-based progress tracking
         - Graceful handling of interruptions
-        
+        - Cancellation support
+
         Args:
             root_path: Root directory to scan
             deep_scan: Whether to perform deep scanning (re-process existing files)
         """
         await self._init_clients()
-        
+
         # Check for existing scan state
         scan_state = await self._get_or_create_scan_state(root_path, deep_scan)
         scan_id = scan_state["scan_id"]
         scan_key = f"{self.scan_key_prefix}state:{scan_id}"
-        
+
+        # Add this scan to active tasks tracking
+        task = asyncio.current_task()
+        if task:
+            self.active_scan_tasks[scan_id] = task
+
         try:
-            logger.info("Starting/resuming scan", 
-                       path=root_path, 
-                       scan_id=scan_id, 
+            logger.info("Starting/resuming scan",
+                       path=root_path,
+                       scan_id=scan_id,
                        deep_scan=deep_scan,
                        resume=scan_state.get("resume", False))
-            
+
             # Build file list with resume capability
             file_queue = await self._build_resumable_file_queue(root_path, scan_state)
-            
+
             files_processed = scan_state.get("files_processed", 0)
+            total_files = len(file_queue) + files_processed
             batch = []
             checkpoint_interval = 50  # Save state every 50 files
-            
+
+            logger.info("Scan initialized",
+                       path=root_path,
+                       total_files=total_files,
+                       files_already_processed=files_processed)
+
             while file_queue:
+                # Check if this scan has been cancelled
+                if scan_id in self.cancelled_scans:
+                    logger.info("Scan cancelled by user request", scan_id=scan_id, path=root_path)
+                    await self._mark_scan_cancelled(scan_key, scan_id)
+                    return
+
                 file_path = file_queue.pop(0)
-                
+
+                # Update current directory being scanned
+                current_dir = os.path.dirname(file_path)
+                await self.redis_client.hset(scan_key, "current_directory", current_dir)
+
+                # Update current file being scanned
+                await self.redis_client.hset(scan_key, "current_file", file_path)
+
+                # Log which file is currently being scanned
+                logger.info("Scanning file",
+                           path=file_path,
+                           scan_id=scan_id,
+                           files_processed=files_processed,
+                           total_files=total_files)
+
                 # Skip if already processed (unless deep scan)
                 if not deep_scan and await self._is_file_processed(file_path):
                     await self._mark_file_completed(scan_key, file_path)
+                    files_processed += 1
+                    logger.debug("Skipped previously processed file", path=file_path)
                     continue
-                
+
                 batch.append(file_path)
-                
+
                 # Process batch when it reaches the configured size
                 if len(batch) >= settings.scan_batch_size:
+                    # Check for cancellation before processing batch
+                    if scan_id in self.cancelled_scans:
+                        logger.info("Scan cancelled by user request", scan_id=scan_id, path=root_path)
+                        await self._mark_scan_cancelled(scan_key, scan_id)
+                        return
+
+                    logger.info("Processing batch",
+                               batch_size=len(batch),
+                               files_processed=files_processed,
+                               remaining_files=len(file_queue))
+
                     processed = await self._process_file_batch_with_checkpoints(batch, scan_key)
                     files_processed += processed
                     batch = []
-                    
+
                     # Update progress checkpoint
                     await self._update_scan_checkpoint(scan_key, files_processed, file_queue)
-                
+
+                    # Log progress
+                    progress_percent = (files_processed / total_files) * 100 if total_files > 0 else 0
+                    logger.info("Scan progress",
+                               files_processed=files_processed,
+                               total_files=total_files,
+                               progress_percent=round(progress_percent, 2))
+
                 # Periodic checkpoint even within batches
                 if files_processed % checkpoint_interval == 0:
                     await self._update_scan_checkpoint(scan_key, files_processed, file_queue)
-            
+
             # Process remaining files in batch
             if batch:
+                # Check for cancellation before processing final batch
+                if scan_id in self.cancelled_scans:
+                    logger.info("Scan cancelled by user request", scan_id=scan_id, path=root_path)
+                    await self._mark_scan_cancelled(scan_key, scan_id)
+                    return
+
+                logger.info("Processing final batch",
+                           batch_size=len(batch),
+                           files_processed=files_processed)
+
                 processed = await self._process_file_batch_with_checkpoints(batch, scan_key)
                 files_processed += processed
-            
+
             # Mark scan as completed and cleanup
             await self._complete_scan(scan_key, files_processed)
-            
-            logger.info("Scan completed", path=root_path, files_processed=files_processed)
-            
+
+            logger.info("Scan completed",
+                       path=root_path,
+                       files_processed=files_processed,
+                       total_files=total_files)
+
         except Exception as e:
             logger.error("Scan failed", path=root_path, error=str(e))
             await self._mark_scan_failed(scan_key, str(e))
             raise
+        finally:
+            # Remove from active tasks tracking
+            if scan_id in self.active_scan_tasks:
+                del self.active_scan_tasks[scan_id]
     
     async def _process_directory(self, dir_path: str):
         """Process directory metadata"""
@@ -177,38 +267,45 @@ class ScannerService:
     async def _process_single_file(self, file_path: str) -> bool:
         """Process a single file and extract metadata"""
         try:
+            # Log which file is currently being scanned
+            logger.info("Processing file", path=file_path)
+
             # Get file stats
             stat_info = os.stat(file_path)
-            
+
             # Skip files that are too large
             if stat_info.st_size > settings.max_file_size_mb * 1024 * 1024:
                 logger.debug("Skipping large file", path=file_path, size=stat_info.st_size)
                 return False
-            
+
             # Extract metadata using the metadata processor
+            logger.debug("Extracting metadata", path=file_path)
             metadata = await self.metadata_processor.process_file(file_path)
-            
+
             if metadata:
                 # Check if file already exists in MongoDB
+                logger.debug("Checking if file exists in DB", path=file_path)
                 existing = await self.mongodb.file_metadata.find_one(
                     {"absolute_path": file_path}
                 )
-                
+
                 if existing:
                     # Update existing document
                     await self.mongodb.file_metadata.update_one(
                         {"_id": existing["_id"]},
                         {"$set": metadata.dict(by_alias=True, exclude={"id"})}
                     )
+                    logger.info("Updated existing file metadata", path=file_path)
                 else:
                     # Insert new document
                     await self.mongodb.file_metadata.insert_one(metadata.dict(by_alias=True))
-                
+                    logger.info("Added new file metadata", path=file_path)
+
                 return True
-            
+
         except Exception as e:
             logger.error("Failed to process file", path=file_path, error=str(e))
-        
+
         return False
     
     def _is_supported_file(self, filename: str) -> bool:
@@ -231,19 +328,70 @@ class ScannerService:
     async def get_scan_status(self) -> Dict[str, Any]:
         """Get current scan status"""
         await self._init_clients()
-        
-        # Get all active scans
-        active_keys = await self.redis_client.keys(f"{self.scan_key_prefix}active:*")
-        active_scans = []
-        
-        for key in active_keys:
+
+        # Get all scan states (both active and inactive)
+        scan_keys = await self.redis_client.keys(f"{self.scan_key_prefix}state:*")
+        all_scans = []
+
+        for key in scan_keys:
             scan_data = await self.redis_client.hgetall(key)
             if scan_data:
-                active_scans.append(scan_data)
-        
+                # Convert string values to appropriate types where needed
+                if 'files_processed' in scan_data:
+                    try:
+                        scan_data['files_processed'] = int(scan_data['files_processed'])
+                    except ValueError:
+                        scan_data['files_processed'] = 0
+
+                # Parse JSON fields
+                import json
+                if 'completed_files' in scan_data:
+                    try:
+                        scan_data['completed_files'] = json.loads(scan_data['completed_files'])
+                    except (json.JSONDecodeError, TypeError):
+                        scan_data['completed_files'] = []
+
+                if 'remaining_queue' in scan_data:
+                    try:
+                        scan_data['remaining_queue'] = json.loads(scan_data['remaining_queue'])
+                    except (json.JSONDecodeError, TypeError):
+                        scan_data['remaining_queue'] = []
+
+                # Calculate progress percentage if possible
+                total_expected = len(scan_data.get('completed_files', [])) + len(scan_data.get('remaining_queue', []))
+                if total_expected > 0:
+                    scan_data['progress_percentage'] = round(
+                        (scan_data.get('files_processed', 0) / total_expected) * 100, 2
+                    )
+                else:
+                    scan_data['progress_percentage'] = 0
+
+                # Determine active/inactive based on status
+                is_active = scan_data.get('status') in ['running', 'pending']
+                scan_data['is_active'] = 'True' if is_active else 'False'  # Store as string in Redis
+
+                # Add current file and directory being scanned
+                scan_data['current_file'] = scan_data.get('current_file', '')
+                scan_data['current_directory'] = scan_data.get('current_directory', '')
+
+                all_scans.append(scan_data)
+
+        # Separate active and inactive scans - convert string back to boolean for processing
+        active_scans = []
+        inactive_scans = []
+        for scan in all_scans:
+            is_active = scan.get('is_active', 'False').lower() == 'true'
+            if is_active:
+                active_scans.append(scan)
+            else:
+                inactive_scans.append(scan)
+
         return {
             "active_scans": len(active_scans),
-            "scans": active_scans
+            "inactive_scans": len(inactive_scans),
+            "total_scans": len(all_scans),
+            "scans": all_scans,
+            "active_scan_details": active_scans
         }
     
     async def _get_or_create_scan_state(self, root_path: str, deep_scan: bool) -> Dict[str, Any]:
@@ -258,7 +406,7 @@ class ScannerService:
         if existing_state and existing_state.get("status") == "running":
             # Resume existing scan
             logger.info("Found existing scan to resume", scan_id=scan_id, path=root_path)
-            existing_state["resume"] = True
+            existing_state["resume"] = "True"  # Convert to string for Redis
             return existing_state
         else:
             # Create new scan state
@@ -269,8 +417,9 @@ class ScannerService:
                 "status": "running",
                 "files_processed": 0,
                 "deep_scan": str(deep_scan),
-                "resume": False,
+                "resume": "False",  # Convert to string for Redis
                 "current_directory": "",
+                "current_file": "",  # Track current file being scanned
                 "completed_files": "[]",  # JSON list of completed files
                 "remaining_queue": "[]"   # JSON list of remaining files
             }
@@ -325,17 +474,36 @@ class ScannerService:
     async def _process_file_batch_with_checkpoints(self, file_paths: List[str], scan_key: str) -> int:
         """Process file batch and update checkpoints"""
         import json
-        
+
         successful = 0
-        
-        for file_path in file_paths:
+        batch_start_time = datetime.utcnow()
+
+        logger.info("Starting batch processing", batch_size=len(file_paths))
+
+        for idx, file_path in enumerate(file_paths, 1):
             try:
+                # Update current file being processed in Redis
+                await self.redis_client.hset(scan_key, "current_file", file_path)
+
+                logger.debug("Processing file in batch",
+                           file_path=file_path,
+                           batch_position=f"{idx}/{len(file_paths)}")
+
                 if await self._process_single_file(file_path):
                     successful += 1
                     await self._mark_file_completed(scan_key, file_path)
+
             except Exception as e:
                 logger.error("Failed to process file in batch", file=file_path, error=str(e))
-        
+
+        batch_end_time = datetime.utcnow()
+        batch_duration = (batch_end_time - batch_start_time).total_seconds()
+
+        logger.info("Batch processing completed",
+                   successful=successful,
+                   failed=len(file_paths) - successful,
+                   duration_seconds=batch_duration)
+
         return successful
     
     async def _mark_file_completed(self, scan_key: str, file_path: str):
@@ -386,6 +554,24 @@ class ScannerService:
         # Set expiration for completed scan state (keep for 24 hours)
         await self.redis_client.expire(scan_key, 86400)
     
+    async def _mark_scan_cancelled(self, scan_key: str, scan_id: str):
+        """Mark scan as cancelled and update state"""
+        cancel_data = {
+            "status": "cancelled",
+            "cancelled_at": datetime.utcnow().isoformat()
+        }
+
+        await self.redis_client.hset(scan_key, mapping=cancel_data)
+
+        # Set expiration for cancelled scan state (cleanup later)
+        await self.redis_client.expire(scan_key, 86400)
+
+        # Also remove from cancelled scans set
+        if scan_id in self.cancelled_scans:
+            self.cancelled_scans.remove(scan_id)
+
+        logger.info("Scan marked as cancelled", scan_id=scan_id)
+
     async def _mark_scan_failed(self, scan_key: str, error_message: str):
         """Mark scan as failed but keep state for potential resume"""
         failure_data = {
@@ -393,9 +579,9 @@ class ScannerService:
             "error": error_message,
             "failed_at": datetime.utcnow().isoformat()
         }
-        
+
         await self.redis_client.hset(scan_key, mapping=failure_data)
-        
+
         # Keep failed scan state for 7 days for debugging
         await self.redis_client.expire(scan_key, 604800)
     
@@ -455,5 +641,49 @@ class ScannerService:
         
         if cleaned_count > 0:
             logger.info("Cleaned up old scan states", count=cleaned_count)
-        
+
         return cleaned_count
+
+    async def stop_all_scans(self):
+        """Stop all running scans by cancelling them"""
+        await self._init_clients()
+
+        # Find all scan state keys
+        scan_keys = await self.redis_client.keys(f"{self.scan_key_prefix}state:*")
+
+        stopped_count = 0
+
+        for scan_key in scan_keys:
+            scan_state = await self.redis_client.hgetall(scan_key)
+
+            if scan_state.get("status") == "running":
+                # Extract scan ID from the key
+                scan_id = scan_key.split(':')[-1]  # Get the ID part from "scan_key_prefix:state:id"
+
+                # Mark scan as cancelled in the tracking set
+                self.cancelled_scans.add(scan_id)
+
+                # Mark scan as cancelled in Redis
+                stop_data = {
+                    "status": "cancelled",
+                    "cancelled_at": datetime.utcnow().isoformat()
+                }
+
+                await self.redis_client.hset(scan_key, mapping=stop_data)
+
+                # Set expiration for cancelled scan state (cleanup later)
+                await self.redis_client.expire(scan_key, 86400)
+
+                # Cancel the associated task if it exists
+                if scan_id in self.active_scan_tasks:
+                    task = self.active_scan_tasks[scan_id]
+                    if not task.done():
+                        task.cancel()
+                        logger.info("Cancelled scan task", scan_id=scan_id)
+
+                stopped_count += 1
+
+        if stopped_count > 0:
+            logger.info("Stopped running scans", count=stopped_count)
+
+        return stopped_count

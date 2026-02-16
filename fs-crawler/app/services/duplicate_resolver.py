@@ -8,11 +8,11 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 import structlog
 
-from database import get_mongodb, get_redis
-from services.duplicate_detector import DuplicateDetector
-from services.rules_engine import RulesEngine
-from models.rules_models import RuleExecutionResult
-from config import settings
+from ..database import get_mongodb, get_redis
+from ..services.duplicate_detector import DuplicateDetector
+from ..services.rules_engine import RulesEngine
+from ..models.rules_models import RuleExecutionResult
+from ..config import settings
 
 logger = structlog.get_logger()
 
@@ -36,9 +36,9 @@ class DuplicateResolver:
     
     async def _init_clients(self):
         """Initialize database clients"""
-        if not self.mongodb:
+        if self.mongodb is None:
             self.mongodb = get_mongodb()
-        if not self.redis_client:
+        if self.redis_client is None:
             self.redis_client = get_redis()
     
     async def resolve_all_duplicates(self, 

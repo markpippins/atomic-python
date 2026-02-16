@@ -15,6 +15,9 @@ import {
   Typography,
   Chip,
   Tooltip,
+  Divider,
+  Avatar,
+  Badge,
 } from '@mui/material'
 import {
   Menu as MenuIcon,
@@ -25,6 +28,10 @@ import {
   Brightness4 as DarkModeIcon,
   Brightness7 as LightModeIcon,
   Circle as CircleIcon,
+  Storage as StorageIcon,
+  Settings as SettingsIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useSystemStatus, useHealth } from '@/hooks/useApi'
@@ -37,15 +44,20 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [isDrawerCollapsed, setIsDrawerCollapsed] = useState(false)
   const { mode, toggleTheme } = useTheme()
   const location = useLocation()
   const navigate = useNavigate()
-  
+
   const { data: systemStatus } = useSystemStatus()
   const { data: health } = useHealth()
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen)
+  }
+
+  const handleCollapseToggle = () => {
+    setIsDrawerCollapsed(!isDrawerCollapsed)
   }
 
   const menuItems = [
@@ -73,26 +85,107 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }
 
   const drawer = (
-    <div>
-      <Toolbar>
-        <Typography variant="h6" noWrap component="div">
-          Media Metadata
-        </Typography>
-      </Toolbar>
-      <List>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Header section */}
+      {!isDrawerCollapsed && (
+        <Box sx={{ p: 2, pb: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Avatar sx={{ bgcolor: 'primary.main', width: 40, height: 40 }}>
+            <StorageIcon />
+          </Avatar>
+          <Box sx={{ overflow: 'hidden' }}>
+            <Typography variant="h6" component="div" sx={{ fontWeight: 600, fontSize: '1rem' }}>
+              FS Crawler
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: '0.75rem' }}>
+              Media Metadata Service
+            </Typography>
+          </Box>
+        </Box>
+      )}
+
+      <Divider />
+
+      {/* Navigation items */}
+      <List sx={{ py: 1, flex: 1 }}>
         {menuItems.map((item) => (
           <ListItem key={item.text} disablePadding>
             <ListItemButton
               selected={location.pathname === item.path}
               onClick={() => navigate(item.path)}
+              sx={{
+                mx: 1,
+                borderRadius: 1.5,
+                mb: 0.5,
+                pl: 2,
+                py: 1,
+                '&.Mui-selected': {
+                  backgroundColor: 'primary.main',
+                  color: 'primary.contrastText',
+                  '&:hover': {
+                    backgroundColor: 'primary.dark',
+                  },
+                },
+                '&:hover': {
+                  backgroundColor: 'action.hover',
+                }
+              }}
             >
-              <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
+              <ListItemIcon sx={{
+                minWidth: 36,
+                color: location.pathname === item.path ? 'primary.contrastText' : 'inherit'
+              }}>
+                {item.icon}
+              </ListItemIcon>
+              {!isDrawerCollapsed && (
+                <ListItemText
+                  primary={item.text}
+                  sx={{
+                    '& .MuiListItemText-primary': {
+                      fontWeight: 500,
+                      fontSize: '0.9rem'
+                    }
+                  }}
+                />
+              )}
             </ListItemButton>
           </ListItem>
         ))}
       </List>
-    </div>
+
+      {/* Collapse toggle */}
+      <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end' }}>
+        <IconButton
+          onClick={handleCollapseToggle}
+          size="small"
+          sx={{
+            borderRadius: '6px',
+            width: 32,
+            height: 32,
+            '&:hover': {
+              backgroundColor: 'action.hover'
+            }
+          }}
+        >
+          {isDrawerCollapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+        </IconButton>
+      </Box>
+
+      {/* Theme toggle */}
+      <Box sx={{ p: 1, display: 'flex', justifyContent: 'center' }}>
+        <IconButton
+          color="inherit"
+          onClick={toggleTheme}
+          sx={{
+            backgroundColor: 'action.hover',
+            borderRadius: '6px',
+            width: 36,
+            height: 36,
+          }}
+        >
+          {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+        </IconButton>
+      </Box>
+    </Box>
   )
 
   return (
@@ -101,39 +194,67 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <AppBar
         position="fixed"
         sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
+          width: { sm: `calc(100% - ${isDrawerCollapsed ? 60 : drawerWidth}px)` },
+          ml: { sm: `${isDrawerCollapsed ? 60 : drawerWidth}px` },
+          backgroundColor: 'background.paper',
+          color: 'text.primary',
+          boxShadow: 1,
+          zIndex: (theme) => theme.zIndex.drawer - 1,
         }}
       >
-        <Toolbar>
+        <Toolbar sx={{ pr: '16px' }}>
           <IconButton
             color="inherit"
             aria-label="open drawer"
             edge="start"
             onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: 'none' } }}
+            sx={{ mr: 1, display: { sm: 'none' } }}
           >
             <MenuIcon />
           </IconButton>
-          
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+
+          <Typography
+            variant="h6"
+            noWrap
+            component="div"
+            sx={{
+              flexGrow: 1,
+              fontWeight: 600,
+              fontSize: '1.1rem',
+              color: 'text.primary',
+            }}
+          >
             {menuItems.find(item => item.path === location.pathname)?.text || 'Dashboard'}
           </Typography>
 
           {/* System Status Indicators */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {systemStatus && (
               <Tooltip title={`System: ${systemStatus.system_status}`}>
-                <Chip
-                  icon={<CircleIcon />}
-                  label={systemStatus.system_status}
-                  size="small"
-                  color={getStatusColor(systemStatus.system_status)}
-                  variant="outlined"
-                />
+                <Badge
+                  variant="dot"
+                  color={getStatusColor(systemStatus.system_status) as any}
+                  overlap="circular"
+                >
+                  <Chip
+                    icon={<CircleIcon />}
+                    label={systemStatus.system_status}
+                    size="small"
+                    color={getStatusColor(systemStatus.system_status)}
+                    variant="outlined"
+                    sx={{
+                      height: 28,
+                      fontSize: '0.75rem',
+                      '& .MuiChip-icon': {
+                        marginLeft: 0.5,
+                        fontSize: '1rem'
+                      }
+                    }}
+                  />
+                </Badge>
               </Tooltip>
             )}
-            
+
             {health && (
               <Tooltip title="Database Health">
                 <Chip
@@ -142,6 +263,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   size="small"
                   color={getStatusColor(health.status)}
                   variant="outlined"
+                  sx={{
+                    height: 28,
+                    fontSize: '0.75rem',
+                    '& .MuiChip-icon': {
+                      marginLeft: 0.5,
+                      fontSize: '1rem'
+                    }
+                  }}
                 />
               </Tooltip>
             )}
@@ -149,25 +278,39 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {systemStatus && systemStatus.active_scans > 0 && (
               <Tooltip title={`${systemStatus.active_scans} active scans`}>
                 <Chip
-                  icon={<ScannerIcon />}
+                  icon={<ScannerIcon className="pulse" />}
                   label={systemStatus.active_scans}
                   size="small"
                   color="info"
-                  className="pulse"
+                  sx={{
+                    height: 28,
+                    fontSize: '0.75rem',
+                    '& .MuiChip-icon': {
+                      marginLeft: 0.5,
+                      fontSize: '1rem'
+                    }
+                  }}
                 />
               </Tooltip>
             )}
           </Box>
-
-          <IconButton color="inherit" onClick={toggleTheme}>
-            {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
-          </IconButton>
         </Toolbar>
       </AppBar>
-      
+
       <Box
         component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+        sx={{
+          width: { sm: isDrawerCollapsed ? 60 : drawerWidth },
+          flexShrink: { sm: 0 },
+          '& .MuiDrawer-paper': {
+            width: { sm: isDrawerCollapsed ? 60 : drawerWidth },
+            boxSizing: 'border-box',
+            backgroundColor: 'background.paper',
+            color: 'text.primary',
+            borderRight: '1px solid',
+            borderColor: 'divider',
+          },
+        }}
         aria-label="navigation menu"
       >
         <Drawer
@@ -179,7 +322,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           }}
           sx={{
             display: { xs: 'block', sm: 'none' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: drawerWidth,
+              backgroundColor: 'background.paper',
+              color: 'text.primary',
+            },
           }}
         >
           {drawer}
@@ -188,23 +336,35 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           variant="permanent"
           sx={{
             display: { xs: 'none', sm: 'block' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              borderRight: '1px solid',
+              borderColor: 'divider',
+              backgroundColor: 'background.paper',
+              color: 'text.primary',
+              overflowX: 'hidden',
+              width: { sm: isDrawerCollapsed ? 60 : drawerWidth },
+            },
           }}
           open
         >
           {drawer}
         </Drawer>
       </Box>
-      
+
       <Box
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          px: { xs: 2, sm: 3, md: 4 },
+          py: { xs: 2, sm: 3 },
+          width: { sm: `calc(100% - ${isDrawerCollapsed ? 60 : drawerWidth}px)` },
+          backgroundColor: 'background.default',
+          minHeight: '100vh',
+          mt: '56px',
+          ml: { sm: isDrawerCollapsed ? '60px' : `${drawerWidth}px` },
         }}
       >
-        <Toolbar />
         {children}
       </Box>
     </Box>

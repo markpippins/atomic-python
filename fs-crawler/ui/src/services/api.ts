@@ -34,7 +34,7 @@ api.interceptors.response.use(
 export const systemApi = {
   getStatus: (): Promise<SystemStatus> =>
     axios.get('/system/status').then(res => res.data),
-  
+
   getHealth: (): Promise<HealthStatus> =>
     axios.get('/health').then(res => res.data),
 }

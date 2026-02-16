@@ -9,13 +9,13 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 import structlog
 
-from database import get_mongodb, get_redis, get_mysql_session
-from models.rules_models import (
+from ..database import get_mongodb, get_redis
+from ..models.rules_models import (
     DeletionRule, RuleSet, RuleCondition, RuleGroup, RuleExecutionContext,
     RuleExecutionResult, ComparisonOperator, LogicalOperator, ActionType,
     ConditionTarget
 )
-from config import settings
+from ..config import settings
 
 logger = structlog.get_logger()
 
@@ -38,9 +38,9 @@ class RulesEngine:
     
     async def _init_clients(self):
         """Initialize database clients"""
-        if not self.mongodb:
+        if self.mongodb is None:
             self.mongodb = get_mongodb()
-        if not self.redis_client:
+        if self.redis_client is None:
             self.redis_client = get_redis()
     
     async def create_rule(self, rule: DeletionRule) -> str:

@@ -8,10 +8,10 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 import structlog
 
-from database import get_mongodb, get_redis
-from models.mongodb_models import FileMetadata
-from services.metadata_processor import MetadataProcessor
-from config import settings
+from ..database import get_mongodb, get_redis
+from ..models.mongodb_models import FileMetadata
+from .metadata_processor import MetadataProcessor
+from ..config import settings
 
 logger = structlog.get_logger()
 
@@ -34,9 +34,9 @@ class DuplicateDetector:
     
     async def _init_clients(self):
         """Initialize database clients"""
-        if not self.mongodb:
+        if self.mongodb is None:
             self.mongodb = get_mongodb()
-        if not self.redis_client:
+        if self.redis_client is None:
             self.redis_client = get_redis()
     
     async def find_duplicates_by_fingerprint(self, limit: int = 1000) -> List[Dict[str, Any]]:

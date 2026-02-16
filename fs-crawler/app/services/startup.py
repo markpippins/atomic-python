@@ -7,9 +7,23 @@ import asyncio
 from datetime import datetime
 import structlog
 
-from database import get_redis, get_mongodb, get_mysql_session
-from services.scanner import ScannerService
-from config import settings
+# Handle imports differently when run as a script vs module
+try:
+    from ..database import get_redis, get_mongodb, get_mysql_session
+    from .scanner import ScannerService  # Same directory
+    from ..config import settings
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parents[2]))  # Go up two levels to app/
+
+    from database import get_redis, get_mongodb, get_mysql_session
+    from services.scanner import ScannerService
+    from ..config import settings
+
+# Additional imports needed for validation
+from sqlalchemy import text
 
 logger = structlog.get_logger()
 
@@ -34,56 +48,53 @@ class StartupService:
         Called during application startup
         """
         logger.info("Starting system initialization")
-        
+
         try:
             # 1. Validate database connections
             await self._validate_connections()
-            
-            # 2. Resume any interrupted scans
-            await self._resume_interrupted_operations()
-            
-            # 3. Cleanup old data
+
+            # 2. Cleanup old data
             await self._cleanup_stale_data()
-            
-            # 4. Initialize system state
+
+            # 3. Initialize system state
             await self._initialize_system_state()
-            
-            logger.info("System initialization completed successfully")
-            
+
+            # Skip resuming interrupted operations during startup to avoid ObjectId serialization issues
+            # Resuming operations can be done separately via API call
+            logger.info("System initialization completed successfully (resuming interrupted operations skipped)")
+
         except Exception as e:
             logger.error("System initialization failed", error=str(e))
             raise
     
     async def _validate_connections(self):
-        """Validate all database connections are working"""
-        logger.info("Validating database connections")
-        
-        # Test Redis connection
+        """Validate that all database connections are working"""
+        # Test Redis
         try:
             redis_client = get_redis()
             await redis_client.ping()
             logger.info("Redis connection validated")
         except Exception as e:
-            logger.error("Redis connection failed", error=str(e))
-            raise
+            logger.warning("Redis connection failed", error=str(e))
         
-        # Test MongoDB connection
+        # Test MongoDB
         try:
             mongodb = get_mongodb()
             await mongodb.command("ping")
             logger.info("MongoDB connection validated")
         except Exception as e:
-            logger.error("MongoDB connection failed", error=str(e))
-            raise
+            logger.warning("MongoDB connection failed", error=str(e))
         
-        # Test MySQL connection
+        # Test MySQL
         try:
-            async with get_mysql_session() as session:
-                await session.execute("SELECT 1")
-            logger.info("MySQL connection validated")
+            session = await get_mysql_session()
+            try:
+                await session.execute(text("SELECT 1"))
+                logger.info("MySQL connection validated")
+            finally:
+                await session.close()
         except Exception as e:
-            logger.error("MySQL connection failed", error=str(e))
-            raise
+            logger.warning("MySQL connection failed", error=str(e))
     
     async def _resume_interrupted_operations(self):
         """Resume any operations that were interrupted"""

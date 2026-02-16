@@ -6,11 +6,23 @@ Modern replacement for the legacy media_hound system
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from bson import ObjectId
 import structlog
 
-from config import settings
-from database import init_databases, close_databases, get_redis, get_mongodb, get_mysql_session
-from api.routes import router
+# Handle imports differently when run as a script vs module
+try:
+    from .config import settings
+    from .database import init_databases, close_databases, get_redis, get_mongodb
+    from .api.routes import router
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent))
+
+    from config import settings
+    from database import init_databases, close_databases, get_redis, get_mongodb
+    from api.routes import router
 
 
 # Configure structured logging
@@ -44,7 +56,10 @@ async def lifespan(app: FastAPI):
     logger.info("Database connections initialized")
     
     # Initialize system and resume operations
-    from services.startup import StartupService
+    try:
+        from .services.startup import StartupService
+    except ImportError:
+        from services.startup import StartupService
     startup_service = StartupService()
     await startup_service.initialize_system()
     
@@ -110,8 +125,10 @@ async def health_check():
         
         mysql_status = "connected"
         try:
-            async with get_mysql_session() as session:
-                await session.execute("SELECT 1")
+            from database import async_session_maker
+            async with async_session_maker() as session:
+                from sqlalchemy import text
+                await session.execute(text("SELECT 1"))
         except:
             mysql_status = "disconnected"
         
@@ -141,7 +158,19 @@ async def system_status():
     try:
         startup_service = app.state.startup_service
         status = await startup_service.get_system_status()
-        return status
+
+        # Convert any ObjectIds to strings in the status
+        def convert_objectids(obj):
+            if isinstance(obj, dict):
+                return {key: convert_objectids(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_objectids(item) for item in obj]
+            elif isinstance(obj, ObjectId):
+                return str(obj)
+            else:
+                return obj
+
+        return convert_objectids(status)
     except Exception as e:
         return {"error": str(e)}
 
@@ -151,7 +180,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8004,
         reload=True,
         log_config=None  # Use structlog instead
     )

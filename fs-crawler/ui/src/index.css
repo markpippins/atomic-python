@@ -1,31 +1,73 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 :root {
-  font-family: 'Roboto', Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', Roboto, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light dark;
-  
-  /* Light theme variables */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f5;
-  --bg-paper: #ffffff;
-  --text-primary: rgba(0, 0, 0, 0.87);
-  --text-secondary: rgba(0, 0, 0, 0.6);
-  --border-color: rgba(0, 0, 0, 0.12);
-  --toast-bg: #ffffff;
-  --toast-color: rgba(0, 0, 0, 0.87);
+
+  /* Light theme variables (Visual Studio inspired) */
+  --bg-primary: #F5F5F5; /* Light gray background */
+  --bg-secondary: #F3F3F3;
+  --bg-paper: #FFFFFF; /* White cards/papers */
+  --text-primary: #1E1E1E; /* Dark gray text */
+  --text-secondary: #606060; /* Lighter gray text */
+  --border-color: #E0E0E0; /* Light gray borders */
+  --toast-bg: #FFFFFF;
+  --toast-color: #1E1E1E;
+
+  /* Accent colors */
+  --primary-main: #007ACC; /* Visual Studio blue */
+  --primary-light: #3399FF;
+  --primary-dark: #005A9E;
+  --secondary-main: #68217A; /* Visual Studio purple */
+  --secondary-light: #9966CC;
+  --secondary-dark: #4A005F;
+  --success-main: #5CB85C;
+  --success-light: #7ED37E;
+  --success-dark: #3D8B3D;
+  --warning-main: #F0AD4E;
+  --warning-light: #F3BD6D;
+  --warning-dark: #D38E3E;
+  --error-main: #D9534F;
+  --error-light: #DD706D;
+  --error-dark: #B54340;
+  --info-main: #5BC0DE;
+  --info-light: #7CCAE0;
+  --info-dark: #3B9FB0;
 }
 
 [data-theme="dark"] {
-  /* Dark theme variables */
-  --bg-primary: #121212;
-  --bg-secondary: #1e1e1e;
-  --bg-paper: #1e1e1e;
-  --text-primary: rgba(255, 255, 255, 0.87);
-  --text-secondary: rgba(255, 255, 255, 0.6);
-  --border-color: rgba(255, 255, 255, 0.12);
-  --toast-bg: #1e1e1e;
-  --toast-color: rgba(255, 255, 255, 0.87);
+  /* Dark theme variables (Visual Studio inspired) */
+  --bg-primary: #1E1E1E; /* Visual Studio dark background */
+  --bg-secondary: #2D2D30; /* Slightly lighter for cards */
+  --bg-paper: #2D2D30;
+  --text-primary: #D4D4D4; /* Light gray text */
+  --text-secondary: #9E9E9E; /* Even lighter gray text */
+  --border-color: #3E3E40; /* Darker gray borders */
+  --toast-bg: #2D2D30;
+  --toast-color: #D4D4D4;
+
+  /* Dark theme accent colors */
+  --primary-main: #1C9BD9; /* Lighter blue for dark theme */
+  --primary-light: #4DA8E7;
+  --primary-dark: #0D7CBC;
+  --secondary-main: #B573D0; /* Lighter purple for dark theme */
+  --secondary-light: #C792EA;
+  --secondary-dark: #9552B2;
+  --success-main: #6ECB63;
+  --success-light: #8DD582;
+  --success-dark: #4FA845;
+  --warning-main: #F2B857;
+  --warning-light: #F4C774;
+  --warning-dark: #E09A3D;
+  --error-main: #E16D76;
+  --error-light: #E78C96;
+  --error-dark: #C74F59;
+  --info-main: #6FC5DA;
+  --info-light: #8ED6E2;
+  --info-dark: #50A7BA;
 }
 
 * {
@@ -34,12 +76,12 @@
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
   background-color: var(--bg-primary);
   color: var(--text-primary);
+  font-family: 'Inter', Roboto, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 #root {
@@ -91,4 +133,223 @@ body {
 
 .spin {
   animation: spin 1s linear infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  60% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.slide-in {
+  animation: slideIn 0.4s ease-out forwards;
+}
+
+.bounce {
+  animation: bounce 1s infinite;
+}
+
+.float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Gradient backgrounds */
+.gradient-primary {
+  background: linear-gradient(135deg, var(--primary-main) 0%, var(--secondary-main) 100%);
+}
+
+.gradient-success {
+  background: linear-gradient(135deg, var(--success-main) 0%, var(--info-main) 100%);
+}
+
+.gradient-warning {
+  background: linear-gradient(135deg, var(--warning-main) 0%, var(--primary-main) 100%);
+}
+
+/* Card hover effect */
+.card-hover {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+}
+
+/* Status indicators */
+.status-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.status-running {
+  background-color: var(--success-main);
+}
+
+.status-stopped {
+  background-color: var(--warning-main);
+}
+
+.status-error {
+  background-color: var(--error-main);
+}
+
+.status-completed {
+  background-color: var(--primary-main);
+}
+
+/* Glowing effect for active elements */
+.glow-active {
+  box-shadow: 0 0 10px rgba(63, 81, 181, 0.3);
+}
+
+/* Modern button styles */
+.btn-modern {
+  border-radius: 8px;
+  font-weight: 500;
+  text-transform: none;
+  padding: 8px 16px;
+  transition: all 0.3s ease;
+}
+
+.btn-modern:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Data visualization enhancements */
+.chart-container {
+  background: var(--bg-paper);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.3s ease;
+}
+
+.chart-container:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Typography enhancements */
+.typography-h4 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.typography-h6 {
+  font-weight: 600;
+}
+
+/* Utility classes */
+.text-center {
+  text-align: center;
+}
+
+.mb-2 {
+  margin-bottom: 16px;
+}
+
+.mb-3 {
+  margin-bottom: 24px;
+}
+
+.mb-4 {
+  margin-bottom: 32px;
+}
+
+.mt-2 {
+  margin-top: 16px;
+}
+
+.mt-3 {
+  margin-top: 24px;
+}
+
+.mt-4 {
+  margin-top: 32px;
+}
+
+.py-4 {
+  padding: 32px 0;
+}
+
+.px-4 {
+  padding: 0 32px;
+}
+
+.py-2 {
+  padding: 16px 0;
+}
+
+.gap-2 {
+  gap: 16px;
+}
+
+.gap-3 {
+  gap: 24px;
+}
+
+.gap-4 {
+  gap: 32px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .gap-2 {
+    gap: 12px;
+  }
+
+  .gap-3 {
+    gap: 16px;
+  }
+
+  .mb-3, .mt-3 {
+    margin: 16px 0;
+  }
 }

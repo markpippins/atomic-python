@@ -4,11 +4,23 @@ API routes for the media metadata service
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import List, Optional
+from bson import ObjectId
 import structlog
 
-from database import get_redis, get_mongodb, get_mysql_session
-from models.mysql_models import LibraryPath, FileType, MetadataHandler
-from services.scanner import ScannerService
+# Handle imports differently when run as a script vs module
+try:
+    from ..database import get_redis, get_mongodb, get_mysql_session
+    from ..models.mysql_models import LibraryPath, FileType, MetadataHandler
+    from ..services.scanner import ScannerService
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parents[2]))  # Go up two levels to app/
+
+    from database import get_redis, get_mongodb, get_mysql_session
+    from models.mysql_models import LibraryPath, FileType, MetadataHandler
+    from services.scanner import ScannerService
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -18,17 +30,157 @@ router = APIRouter()
 @router.get("/libraries", response_model=List[dict])
 async def list_libraries():
     """List all configured library paths"""
-    async with get_mysql_session() as session:
-        # TODO: Implement proper SQLAlchemy query
-        return {"message": "Library listing not yet implemented"}
+    from ..database import async_session_maker
+    from sqlalchemy import select
+    async with async_session_maker() as session:
+        result = await session.execute(select(LibraryPath))
+        libraries = result.scalars().all()
+
+        # Convert SQLAlchemy objects to dictionaries properly
+        libraries_list = []
+        for lib in libraries:
+            lib_dict = {}
+            for column in lib.__table__.columns:
+                value = getattr(lib, column.name)
+                # Convert datetime objects to ISO format strings
+                if hasattr(value, 'isoformat'):
+                    lib_dict[column.name] = value.isoformat()
+                else:
+                    lib_dict[column.name] = value
+            libraries_list.append(lib_dict)
+
+        return libraries_list
 
 
 @router.post("/libraries")
-async def add_library(path: str, name: Optional[str] = None, scan_enabled: bool = True):
+async def add_library(request_data: dict):
     """Add a new library path"""
-    async with get_mysql_session() as session:
-        # TODO: Implement library path creation
-        return {"message": f"Library path {path} added"}
+    from ..database import async_session_maker
+    from sqlalchemy import select
+    from datetime import datetime
+
+    # Extract required fields
+    path = request_data.get("path")
+    if not path:
+        raise HTTPException(status_code=400, detail="Path is required")
+
+    # Extract optional fields
+    name = request_data.get("name") or path.split('/')[-1]
+    scan_enabled = request_data.get("scan_enabled", True)
+    deep_scan = request_data.get("deep_scan", False)
+    path_type = request_data.get("path_type", "general")
+    auto_delete_duplicates = request_data.get("auto_delete_duplicates", False)
+    delete_lower_quality = request_data.get("delete_lower_quality", True)
+    quality_threshold = request_data.get("quality_threshold", 100)
+    preferred_formats = request_data.get("preferred_formats", "FLAC,MP3")
+    deletion_priority = request_data.get("deletion_priority", 50)
+
+    async with async_session_maker() as session:
+        # Check if library path already exists
+        result = await session.execute(select(LibraryPath).where(LibraryPath.path == path))
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Library path {path} already exists")
+
+        # Create new library path
+        library = LibraryPath(
+            path=path,
+            name=name,
+            scan_enabled=scan_enabled,
+            deep_scan=deep_scan,
+            path_type=path_type,
+            auto_delete_duplicates=auto_delete_duplicates,
+            delete_lower_quality=delete_lower_quality,
+            quality_threshold=quality_threshold,
+            preferred_formats=preferred_formats,
+            deletion_priority=deletion_priority,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+
+        session.add(library)
+        await session.commit()
+        await session.refresh(library)
+
+        return {"message": f"Library path {path} added", "id": library.id}
+
+
+@router.put("/libraries/{library_id}")
+async def update_library(library_id: int, request_data: dict):
+    """Update an existing library path"""
+    from ..database import async_session_maker
+    from sqlalchemy import select
+    from datetime import datetime
+
+    async with async_session_maker() as session:
+        # Get the existing library
+        result = await session.execute(select(LibraryPath).where(LibraryPath.id == library_id))
+        library = result.scalar_one_or_none()
+
+        if not library:
+            raise HTTPException(status_code=404, detail="Library path not found")
+
+        # Update fields if provided in request_data
+        if "path" in request_data:
+            # Check if the new path already exists for another library
+            existing_result = await session.execute(
+                select(LibraryPath).where(
+                    LibraryPath.path == request_data["path"],
+                    LibraryPath.id != library_id
+                )
+            )
+            existing = existing_result.scalar_one_or_none()
+            if existing:
+                raise HTTPException(status_code=400, detail=f"Library path {request_data['path']} already exists")
+            library.path = request_data["path"]
+
+        if "name" in request_data:
+            library.name = request_data["name"]
+        if "scan_enabled" in request_data:
+            library.scan_enabled = request_data["scan_enabled"]
+        if "deep_scan" in request_data:
+            library.deep_scan = request_data["deep_scan"]
+        if "path_type" in request_data:
+            library.path_type = request_data["path_type"]
+        if "auto_delete_duplicates" in request_data:
+            library.auto_delete_duplicates = request_data["auto_delete_duplicates"]
+        if "delete_lower_quality" in request_data:
+            library.delete_lower_quality = request_data["delete_lower_quality"]
+        if "quality_threshold" in request_data:
+            library.quality_threshold = request_data["quality_threshold"]
+        if "preferred_formats" in request_data:
+            library.preferred_formats = request_data["preferred_formats"]
+        if "deletion_priority" in request_data:
+            library.deletion_priority = request_data["deletion_priority"]
+
+        # Update the timestamp
+        library.updated_at = datetime.utcnow()
+
+        await session.commit()
+        await session.refresh(library)
+
+        return {"message": f"Library path {library.path} updated", "id": library.id}
+
+
+@router.delete("/libraries/{library_id}")
+async def delete_library(library_id: int):
+    """Delete a library path"""
+    from ..database import async_session_maker
+    from sqlalchemy import delete
+    from datetime import datetime
+
+    async with async_session_maker() as session:
+        # Delete the library
+        stmt = delete(LibraryPath).where(LibraryPath.id == library_id)
+        result = await session.execute(stmt)
+
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Library path not found")
+
+        await session.commit()
+
+        return {"message": "Library path deleted successfully", "id": library_id}
 
 
 # Scanning Routes
@@ -50,22 +202,46 @@ async def start_scan(background_tasks: BackgroundTasks, path: Optional[str] = No
 @router.get("/scan/status")
 async def get_scan_status():
     """Get current scan status"""
-    redis_client = get_redis()
-    
-    # Get active scan operations from Redis
-    active_scans = await redis_client.keys("scan:active:*")
-    
-    return {
-        "active_scans": len(active_scans),
-        "scan_operations": active_scans
-    }
+    from ..services.scanner import ScannerService
+
+    scanner = ScannerService()
+    status = await scanner.get_scan_status()
+
+    # Limit the amount of data returned for UI performance
+    # Specifically limit the remaining_queue to prevent massive data transfer
+    if "scans" in status:
+        for scan in status["scans"]:
+            if "remaining_queue" in scan and isinstance(scan["remaining_queue"], list):
+                # Only return the first 10 and last 10 items if the queue is large
+                queue = scan["remaining_queue"]
+                if len(queue) > 20:
+                    limited_queue = queue[:10] + ["..."] + queue[-10:]
+                    scan["remaining_queue"] = limited_queue
+                    scan["remaining_queue_total"] = len(queue)  # Keep track of the total
+
+    # Convert any ObjectIds to strings in the status
+    def convert_objectids(obj):
+        if isinstance(obj, dict):
+            return {key: convert_objectids(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_objectids(item) for item in obj]
+        elif isinstance(obj, ObjectId):
+            return str(obj)
+        else:
+            return obj
+
+    return convert_objectids(status)
 
 
 @router.post("/scan/stop")
 async def stop_scan():
     """Stop all scan operations"""
-    # TODO: Implement scan stopping logic
-    return {"message": "Scan stop requested"}
+    from ..services.scanner import ScannerService
+
+    scanner = ScannerService()
+    stopped_count = await scanner.stop_all_scans()
+
+    return {"message": f"Stop requested for running scans", "stopped_count": stopped_count}
 
 
 # Search Routes
@@ -78,20 +254,31 @@ async def search_files(
 ):
     """Search for files by metadata"""
     mongodb = get_mongodb()
-    
+
     # Build MongoDB query
     query = {}
     if q:
         query["$text"] = {"$search": q}
     if file_type:
         query["file_category"] = file_type
-    
+
     # Execute search
     cursor = mongodb.file_metadata.find(query).skip(offset).limit(limit)
     results = await cursor.to_list(length=limit)
-    
+
+    # Convert ObjectIds to strings
+    processed_results = []
+    for result in results:
+        processed_result = {}
+        for key, value in result.items():
+            if isinstance(value, ObjectId):
+                processed_result[key] = str(value)
+            else:
+                processed_result[key] = value
+        processed_results.append(processed_result)
+
     return {
-        "results": results,
+        "results": processed_results,
         "total": await mongodb.file_metadata.count_documents(query),
         "limit": limit,
         "offset": offset
@@ -102,15 +289,23 @@ async def search_files(
 async def get_file_metadata(file_id: str):
     """Get detailed metadata for a specific file"""
     mongodb = get_mongodb()
-    
+
     try:
         from bson import ObjectId
         file_doc = await mongodb.file_metadata.find_one({"_id": ObjectId(file_id)})
-        
+
         if not file_doc:
             raise HTTPException(status_code=404, detail="File not found")
-        
-        return file_doc
+
+        # Convert ObjectId to string
+        processed_doc = {}
+        for key, value in file_doc.items():
+            if isinstance(value, ObjectId):
+                processed_doc[key] = str(value)
+            else:
+                processed_doc[key] = value
+
+        return processed_doc
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid file ID")
 
@@ -120,7 +315,7 @@ async def get_file_metadata(file_id: str):
 async def get_statistics():
     """Get system statistics"""
     mongodb = get_mongodb()
-    
+
     # Get file counts by category
     pipeline = [
         {"$group": {
@@ -129,14 +324,21 @@ async def get_statistics():
             "total_size": {"$sum": "$file_size"}
         }}
     ]
-    
+
     category_stats = []
     async for doc in mongodb.file_metadata.aggregate(pipeline):
-        category_stats.append(doc)
-    
+        # Convert ObjectId to string if present
+        processed_doc = {}
+        for key, value in doc.items():
+            if isinstance(value, ObjectId):
+                processed_doc[key] = str(value)
+            else:
+                processed_doc[key] = value
+        category_stats.append(processed_doc)
+
     total_files = await mongodb.file_metadata.count_documents({})
     total_directories = await mongodb.directory_metadata.count_documents({})
-    
+
     return {
         "total_files": total_files,
         "total_directories": total_directories,
@@ -148,20 +350,61 @@ async def get_statistics():
 @router.get("/duplicates/stats")
 async def get_duplicate_statistics():
     """Get statistics about duplicates in the system"""
-    from services.duplicate_detector import DuplicateDetector
-    
+    # Dynamically determine the correct import method
+    import sys
+    from pathlib import Path
+
+    # Add the project root to the path to allow absolute imports
+    project_root = Path(__file__).parent.parent.parent
+    project_root_str = str(project_root)
+
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+    try:
+        # Try relative import first (for when run as part of the package)
+        from ..services.duplicate_detector import DuplicateDetector
+    except (ImportError, ValueError):
+        # If relative import fails due to running as a script, use absolute import
+        from app.services.duplicate_detector import DuplicateDetector
+
     detector = DuplicateDetector()
     stats = await detector.get_duplicate_statistics()
-    return stats
+
+    # Convert any ObjectIds to strings in the stats
+    processed_stats = {}
+    for key, value in stats.items():
+        if isinstance(value, ObjectId):
+            processed_stats[key] = str(value)
+        else:
+            processed_stats[key] = value
+
+    return processed_stats
 
 
 @router.post("/duplicates/detect")
 async def detect_duplicates(background_tasks: BackgroundTasks, auto_mark: bool = False):
     """Start duplicate detection process"""
-    from services.duplicate_detector import DuplicateDetector
-    
+    # Dynamically determine the correct import method
+    import sys
+    from pathlib import Path
+
+    # Add the project root to the path to allow absolute imports
+    project_root = Path(__file__).parent.parent.parent
+    project_root_str = str(project_root)
+
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+    try:
+        # Try relative import first (for when run as part of the package)
+        from ..services.duplicate_detector import DuplicateDetector
+    except (ImportError, ValueError):
+        # If relative import fails due to running as a script, use absolute import
+        from app.services.duplicate_detector import DuplicateDetector
+
     detector = DuplicateDetector()
-    
+
     if auto_mark:
         background_tasks.add_task(detector.process_all_duplicates, 100, True)
         return {"message": "Started duplicate detection with auto-marking for deletion"}
@@ -173,11 +416,27 @@ async def detect_duplicates(background_tasks: BackgroundTasks, auto_mark: bool =
 @router.get("/duplicates/candidates")
 async def get_deletion_candidates(limit: int = 100):
     """Get files marked for deletion"""
-    from services.duplicate_detector import DuplicateDetector
-    
+    # Dynamically determine the correct import method
+    import sys
+    from pathlib import Path
+
+    # Add the project root to the path to allow absolute imports
+    project_root = Path(__file__).parent.parent.parent
+    project_root_str = str(project_root)
+
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+    try:
+        # Try relative import first (for when run as part of the package)
+        from ..services.duplicate_detector import DuplicateDetector
+    except (ImportError, ValueError):
+        # If relative import fails due to running as a script, use absolute import
+        from app.services.duplicate_detector import DuplicateDetector
+
     detector = DuplicateDetector()
     candidates = await detector.get_deletion_candidates(limit)
-    
+
     return {
         "deletion_candidates": candidates,
         "total_count": len(candidates)
@@ -187,17 +446,33 @@ async def get_deletion_candidates(limit: int = 100):
 @router.get("/duplicates/groups")
 async def get_duplicate_groups(method: str = "fingerprint", limit: int = 50):
     """Get duplicate groups"""
-    from services.duplicate_detector import DuplicateDetector
-    
+    # Dynamically determine the correct import method
+    import sys
+    from pathlib import Path
+
+    # Add the project root to the path to allow absolute imports
+    project_root = Path(__file__).parent.parent.parent
+    project_root_str = str(project_root)
+
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+    try:
+        # Try relative import first (for when run as part of the package)
+        from ..services.duplicate_detector import DuplicateDetector
+    except (ImportError, ValueError):
+        # If relative import fails due to running as a script, use absolute import
+        from app.services.duplicate_detector import DuplicateDetector
+
     detector = DuplicateDetector()
-    
+
     if method == "fingerprint":
         groups = await detector.find_duplicates_by_fingerprint(limit)
     elif method == "hash":
         groups = await detector.find_duplicates_by_content_hash(limit)
     else:
         raise HTTPException(status_code=400, detail="Method must be 'fingerprint' or 'hash'")
-    
+
     return {
         "duplicate_groups": groups,
         "method": method,
@@ -209,11 +484,11 @@ async def get_duplicate_groups(method: str = "fingerprint", limit: int = 50):
 @router.get("/rules")
 async def list_rules(enabled_only: bool = True):
     """List all deletion rules"""
-    from services.rules_engine import RulesEngine
-    
+    from ..services.rules_engine import RulesEngine
+
     engine = RulesEngine()
     rules = await engine.get_rules(enabled_only=enabled_only)
-    
+
     return {
         "rules": [rule.dict() for rule in rules],
         "total_count": len(rules)
@@ -223,7 +498,7 @@ async def list_rules(enabled_only: bool = True):
 @router.post("/rules")
 async def create_rule(rule_data: dict):
     """Create a new deletion rule"""
-    from services.rules_engine import RulesEngine
+    from ..services.rules_engine import RulesEngine
     from models.rules_models import DeletionRule
     
     try:
@@ -239,11 +514,11 @@ async def create_rule(rule_data: dict):
 @router.put("/rules/{rule_id}")
 async def update_rule(rule_id: str, updates: dict):
     """Update an existing rule"""
-    from services.rules_engine import RulesEngine
-    
+    from ..services.rules_engine import RulesEngine
+
     engine = RulesEngine()
     success = await engine.update_rule(rule_id, updates)
-    
+
     if success:
         return {"message": "Rule updated successfully"}
     else:
@@ -253,11 +528,11 @@ async def update_rule(rule_id: str, updates: dict):
 @router.delete("/rules/{rule_id}")
 async def delete_rule(rule_id: str):
     """Delete a rule"""
-    from services.rules_engine import RulesEngine
-    
+    from ..services.rules_engine import RulesEngine
+
     engine = RulesEngine()
     success = await engine.delete_rule(rule_id)
-    
+
     if success:
         return {"message": "Rule deleted successfully"}
     else:
@@ -267,11 +542,11 @@ async def delete_rule(rule_id: str):
 @router.post("/rules/defaults")
 async def create_default_rules():
     """Create default deletion rules"""
-    from services.rules_engine import RulesEngine
-    
+    from ..services.rules_engine import RulesEngine
+
     engine = RulesEngine()
     rule_ids = await engine.create_default_rules()
-    
+
     return {
         "created_rules": rule_ids,
         "message": f"Created {len(rule_ids)} default rules"
@@ -281,9 +556,9 @@ async def create_default_rules():
 @router.post("/rules/templates")
 async def create_rule_from_template(template_name: str, parameters: dict = None):
     """Create a rule from a predefined template"""
-    from services.rules_engine import RulesEngine
+    from ..services.rules_engine import RulesEngine
     from utils.rule_builder import (
-        delete_low_quality_mp3s, prefer_albums_over_misc, 
+        delete_low_quality_mp3s, prefer_albums_over_misc,
         delete_very_small_files, prefer_lossless_over_lossy,
         review_compilation_duplicates
     )
@@ -365,10 +640,10 @@ async def resolve_duplicates(
     batch_size: int = 50
 ):
     """Start duplicate resolution using rules engine"""
-    from services.duplicate_resolver import DuplicateResolver
-    
+    from ..services.duplicate_resolver import DuplicateResolver
+
     resolver = DuplicateResolver()
-    
+
     if dry_run:
         # Return preview for dry runs
         preview = await resolver.preview_resolution(limit=10)
@@ -385,8 +660,8 @@ async def resolve_duplicates(
 @router.get("/duplicates/resolution-stats")
 async def get_resolution_statistics():
     """Get statistics about duplicate resolutions"""
-    from services.duplicate_resolver import DuplicateResolver
-    
+    from ..services.duplicate_resolver import DuplicateResolver
+
     resolver = DuplicateResolver()
     stats = await resolver.get_resolution_statistics()
     return stats
@@ -395,11 +670,11 @@ async def get_resolution_statistics():
 @router.get("/duplicates/preview")
 async def preview_duplicate_resolution(limit: int = 10):
     """Preview duplicate resolution without making changes"""
-    from services.duplicate_resolver import DuplicateResolver
-    
+    from ..services.duplicate_resolver import DuplicateResolver
+
     resolver = DuplicateResolver()
     preview = await resolver.preview_resolution(limit)
-    
+
     return {
         "preview_results": preview,
         "total_previewed": len(preview)
@@ -410,14 +685,22 @@ async def preview_duplicate_resolution(limit: int = 10):
 @router.get("/config/file-types")
 async def list_file_types():
     """List supported file types"""
-    async with get_mysql_session() as session:
-        # TODO: Implement file type listing
-        return {"message": "File type listing not yet implemented"}
+    from ..database import async_session_maker
+    from sqlalchemy import select
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(FileType))
+        file_types = result.scalars().all()
+        return [ft.__dict__ for ft in file_types]
 
 
 @router.get("/config/handlers")
 async def list_metadata_handlers():
     """List metadata handlers"""
-    async with get_mysql_session() as session:
-        # TODO: Implement handler listing
-        return {"message": "Handler listing not yet implemented"}
+    from ..database import async_session_maker
+    from sqlalchemy import select
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(MetadataHandler))
+        handlers = result.scalars().all()
+        return [handler.__dict__ for handler in handlers]

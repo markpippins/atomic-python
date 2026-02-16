@@ -8,9 +8,19 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
+from sqlalchemy import text
 import structlog
 
-from config import settings
+# Handle imports differently when run as a script vs module
+try:
+    from .config import settings
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent))  # Same directory
+
+    from config import settings
 
 logger = structlog.get_logger()
 
@@ -48,10 +58,23 @@ async def init_databases():
         mysql_engine = create_async_engine(mysql_url, echo=False)
         async_session_maker = async_sessionmaker(mysql_engine, expire_on_commit=False)
         
-        # Test MySQL connection
-        async with async_session_maker() as session:
-            await session.execute("SELECT 1")
-        logger.info("MySQL connection established")
+        # Create database tables if they don't exist
+        from sqlalchemy import event
+        from sqlalchemy.schema import CreateTable
+        try:
+            from .models.mysql_models import LibraryPath, FileType, MetadataHandler, HandlerFileType, ScanOperation
+        except ImportError:
+            # When run as a script, use absolute imports
+            import sys
+            from pathlib import Path
+            sys.path.append(str(Path(__file__).parent.parent))  # Go up two levels to app/
+
+            from models.mysql_models import LibraryPath, FileType, MetadataHandler, HandlerFileType, ScanOperation
+
+        # Create all tables
+        async with mysql_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("MySQL tables created/verified")
         
     except Exception as e:
         logger.error("Failed to initialize databases", error=str(e))
@@ -61,36 +84,39 @@ async def init_databases():
 async def close_databases():
     """Close all database connections"""
     global redis_client, mongodb_client, mysql_engine
-    
-    if redis_client:
+
+    if redis_client is not None:
         await redis_client.close()
         logger.info("Redis connection closed")
-    
-    if mongodb_client:
+
+    if mongodb_client is not None:
         mongodb_client.close()
         logger.info("MongoDB connection closed")
-    
-    if mysql_engine:
+
+    if mysql_engine is not None:
         await mysql_engine.dispose()
         logger.info("MySQL connection closed")
 
 
 def get_redis() -> redis.Redis:
     """Get Redis client instance"""
-    if redis_client is None:
+    if redis_client is not None:
+        return redis_client
+    else:
         raise RuntimeError("Redis client not initialized")
-    return redis_client
 
 
 def get_mongodb():
     """Get MongoDB database instance"""
-    if mongodb_db is None:
+    if mongodb_db is not None:
+        return mongodb_db
+    else:
         raise RuntimeError("MongoDB client not initialized")
-    return mongodb_db
 
 
 async def get_mysql_session() -> AsyncSession:
     """Get MySQL session"""
-    if async_session_maker is None:
+    if async_session_maker is not None:
+        return async_session_maker()
+    else:
         raise RuntimeError("MySQL engine not initialized")
-    return async_session_maker()

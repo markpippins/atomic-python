@@ -10,11 +10,23 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 import structlog
 
-from models.mongodb_models import FileMetadata, AudioMetadata, VideoMetadata, ImageMetadata, DocumentMetadata
-from handlers.audio import MutagenHandler
-from handlers.image import ExifHandler
-from handlers.generic import GenericFileHandler
-from config import settings
+# Handle imports differently when run as a script vs module
+try:
+    from ..models.mongodb_models import FileMetadata, AudioMetadata, VideoMetadata, ImageMetadata, DocumentMetadata
+    from ..handlers.audio import MutagenHandler
+    from ..handlers.image import ExifHandler
+    from ..handlers.generic import GenericFileHandler
+    from ..config import settings
+except ImportError:
+    # When run as a script, use absolute imports
+    import sys
+    sys.path.append(str(Path(__file__).parents[2]))  # Go up two levels to app/
+
+    from ..models.mongodb_models import FileMetadata, AudioMetadata, VideoMetadata, ImageMetadata, DocumentMetadata
+    from handlers.audio import MutagenHandler
+    from handlers.image import ExifHandler
+    from handlers.generic import GenericFileHandler
+    from ..config import settings
 
 logger = structlog.get_logger()
 

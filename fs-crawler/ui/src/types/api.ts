@@ -46,6 +46,9 @@ export interface ScanOperation {
   status: 'running' | 'completed' | 'failed'
   files_processed: number
   deep_scan: string
+  current_directory?: string
+  progress_percentage?: number
+  is_active?: boolean
   last_checkpoint?: string
   error?: string
 }

@@ -1,0 +1,32 @@
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.34.0
+
+# Database Drivers
+motor==3.5.1  # Async MongoDB
+redis==5.2.0
+sqlalchemy==2.0.35
+aiomysql==0.3.0
+pymongo==4.8.0  # Added pymongo dependency
+
+# Data Validation & Serialization
+pydantic==2.10.3
+pydantic-settings==2.7.1
+
+# Media Processing Libraries
+mutagen==1.47.0  # Audio metadata
+Pillow>=10.1.0   # Image processing (updated for compatibility)
+ExifRead==3.0.0  # EXIF data
+python-magic==0.4.27  # File type detection
+
+# Video Processing (optional, can be heavy)
+# opencv-python-headless==4.8.1.78
+
+# Utilities
+aiofiles==24.3.0  # Async file operations
+python-multipart==0.0.20  # File uploads
+httpx==0.28.1  # HTTP client for testing
+
+# Development & Monitoring
+structlog==25.1.0  # Structured logging
+rich==14.3.1  # Pretty printing/logging

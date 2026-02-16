@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://localhost:6379
+      - MONGODB_URL=mongodb://mongodb:27017  # This will be unavailable
+      - MYSQL_URL=mysql://media:changeme@mysql:3306/media?createDatabaseIfNotExist=true
+      - PYTHONPATH=/app
+    volumes:
+      - ./app:/app
+      - ./media:/media:ro  # Mount media directories as read-only
+    restart: unless-stopped
